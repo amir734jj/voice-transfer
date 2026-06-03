@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Serilog;
 using VoiceTransfer.Audio.NAudio;
 using VoiceTransfer.Audio.OwnAudio;
+using VoiceTransfer.Audio.PortAudio;
 using VoiceTransfer.Audio.SoundFlow;
 using VoiceTransfer.Interfaces;
 
@@ -12,7 +13,8 @@ public enum AudioEngineType
     Auto,
     OwnAudio,
     NAudio,
-    SoundFlow
+    SoundFlow,
+    PortAudio
 }
 
 public static class AudioBackendFactory
@@ -24,6 +26,7 @@ public static class AudioBackendFactory
             AudioEngineType.NAudio => RequireWindows(new NAudioBackend()),
             AudioEngineType.OwnAudio => new OwnAudioBackend(),
             AudioEngineType.SoundFlow => new SoundFlowBackend(),
+            AudioEngineType.PortAudio => new PortAudioBackend(),
             AudioEngineType.Auto => CreateAuto(loopback),
             _ => throw new ArgumentOutOfRangeException(nameof(engine), engine, "Unknown audio engine")
         };
