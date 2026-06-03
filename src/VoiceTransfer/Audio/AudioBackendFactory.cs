@@ -19,7 +19,7 @@ public static class AudioBackendFactory
 {
     public static IAudioBackend Create(AudioEngineType engine = AudioEngineType.Auto, bool loopback = false)
     {
-        return engine switch
+        var backend = engine switch
         {
             AudioEngineType.NAudio => RequireWindows(new NAudioBackend()),
             AudioEngineType.OwnAudio => new OwnAudioBackend(),
@@ -27,6 +27,10 @@ public static class AudioBackendFactory
             AudioEngineType.Auto => CreateAuto(loopback),
             _ => throw new ArgumentOutOfRangeException(nameof(engine), engine, "Unknown audio engine")
         };
+
+        var resolved = backend.GetType().Name.Replace("Backend", "");
+        Log.Information("Audio engine: {Engine}{Auto}", resolved, engine == AudioEngineType.Auto ? " (auto)" : "");
+        return backend;
     }
 
     private static IAudioBackend CreateAuto(bool loopback)
