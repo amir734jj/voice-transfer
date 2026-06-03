@@ -1,6 +1,5 @@
-using Ownaudio.Core;
-using OwnaudioNET;
 using Serilog;
+using VoiceTransfer.Audio;
 using VoiceTransfer.Data;
 using VoiceTransfer.Logic;
 
@@ -19,7 +18,7 @@ namespace VoiceTransfer.Modes;
 /// </summary>
 public static class ReceiverMode
 {
-    public static void Run(string outputFile, string? inputWav, int deviceIndex, int timeoutSeconds, TransmissionProfile profile, string? password = null)
+    public static void Run(IAudioBackend audio, string outputFile, string? inputWav, int deviceIndex, int timeoutSeconds, TransmissionProfile profile, string? password = null)
     {
         float[] samples;
 
@@ -33,7 +32,7 @@ public static class ReceiverMode
         }
         else
         {
-            samples = RecordFromMicrophone(deviceIndex, timeoutSeconds);
+            samples = RecordFromMicrophone(audio, deviceIndex, timeoutSeconds);
             if (samples.Length == 0)
             {
                 Log.Error("No audio captured");
@@ -259,62 +258,44 @@ public static class ReceiverMode
         return samples;
     }
 
-    private static float[] RecordFromMicrophone(int deviceIndex, int timeoutSeconds)
+    private static float[] RecordFromMicrophone(IAudioBackend audio, int deviceIndex, int timeoutSeconds)
     {
-        var inputs = OwnaudioNet.GetInputDevices();
+        var deviceNames = audio.GetInputDeviceNames();
         Log.Information("Available input devices:");
-        for (var i = 0; i < inputs.Count; i++)
-            Log.Information("  [{Index}] {Name}", i, inputs[i].Name);
+        for (var i = 0; i < deviceNames.Count; i++)
+            Log.Information("  [{Index}] {Name}", i, deviceNames[i]);
 
-        if (inputs.Count == 0)
+        if (deviceNames.Count == 0)
         {
             Log.Error("No audio input devices found");
             return Array.Empty<float>();
         }
 
-        if (deviceIndex >= inputs.Count)
+        if (deviceIndex >= deviceNames.Count)
         {
-            Log.Error("Device index {Index} out of range (0-{Max})", deviceIndex, inputs.Count - 1);
+            Log.Error("Device index {Index} out of range (0-{Max})", deviceIndex, deviceNames.Count - 1);
             return Array.Empty<float>();
         }
 
-        var config = new AudioConfig
-        {
-            SampleRate = Constants.SampleRate,
-            Channels = Constants.Channels,
-            EnableOutput = false,
-            EnableInput = true,
-            InputDeviceId = inputs[deviceIndex].DeviceId
-        };
-
-        OwnaudioNet.Initialize(config);
-        OwnaudioNet.Start();
-
+        using var recorder = audio.CreateRecorder(deviceIndex);
         var allSamples = new List<float>();
+        var readBuffer = new float[4096];
 
         Log.Information("Recording for {Seconds}s... (speak normally, FSK signal will be filtered)", timeoutSeconds);
 
         var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-        try
+        while (DateTime.UtcNow < deadline)
         {
-            while (DateTime.UtcNow < deadline)
+            var count = recorder.Read(readBuffer);
+            if (count > 0)
             {
-                var buffer = OwnaudioNet.Receive(out var sampleCount);
-                if (buffer != null && sampleCount > 0)
-                {
-                    for (var i = 0; i < sampleCount; i++)
-                        allSamples.Add(buffer[i]);
-                    OwnaudioNet.ReturnInputBuffer(buffer);
-                }
-                else
-                {
-                    Thread.Sleep(5);
-                }
+                for (var i = 0; i < count; i++)
+                    allSamples.Add(readBuffer[i]);
             }
-        }
-        finally
-        {
-            OwnaudioNet.Shutdown();
+            else
+            {
+                Thread.Sleep(5);
+            }
         }
 
         var samples = allSamples.ToArray();

@@ -1,8 +1,5 @@
-using Ownaudio.Core;
-using OwnaudioNET;
-using OwnaudioNET.Mixing;
-using OwnaudioNET.Sources;
 using Serilog;
+using VoiceTransfer.Audio;
 using VoiceTransfer.Data;
 using VoiceTransfer.Logic;
 
@@ -18,7 +15,7 @@ namespace VoiceTransfer.Modes;
 /// </summary>
 public static class SenderMode
 {
-    public static void Run(string inputFile, string? outputWav, int deviceIndex, TransmissionProfile profile, string? password = null)
+    public static void Run(IAudioBackend audio, string inputFile, string? outputWav, int deviceIndex, TransmissionProfile profile, string? password = null)
     {
         // 1. Read and validate the input file
         if (!File.Exists(inputFile))
@@ -70,54 +67,21 @@ public static class SenderMode
         }
         else
         {
-            PlayAudio(allSamples, deviceIndex);
+            PlayAudio(audio, allSamples, deviceIndex);
         }
     }
 
-    private static void PlayAudio(float[] samples, int deviceIndex)
+    private static void PlayAudio(IAudioBackend audio, float[] samples, int deviceIndex)
     {
         Log.Information("Using audio output device index {Index}", deviceIndex);
 
-        var config = new AudioConfig
-        {
-            SampleRate = Constants.SampleRate,
-            Channels = Constants.Channels,
-            EnableOutput = true,
-            EnableInput = false
-        };
+        using var player = audio.CreatePlayer(deviceIndex);
 
-        var outputs = OwnaudioNet.GetOutputDevices();
-        if (deviceIndex < outputs.Count)
-        {
-            config.OutputDeviceId = outputs[deviceIndex].DeviceId;
-        }
+        var durationSec = (double)samples.Length / Constants.SampleRate;
+        Log.Information("Playing FSK audio ({Duration:F1}s)... Press Ctrl+C to abort.", durationSec);
 
-        OwnaudioNet.Initialize(config);
-        OwnaudioNet.Start();
+        player.Play(samples);
 
-        try
-        {
-            var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
-            mixer.Start();
-
-            var source = new SampleSource(samples, OwnaudioNet.Engine!.Config);
-            mixer.AddSource(source);
-            source.Play();
-
-            var durationSec = (double)samples.Length / Constants.SampleRate;
-            Log.Information("Playing FSK audio ({Duration:F1}s)... Press Ctrl+C to abort.", durationSec);
-
-            while (!source.IsEndOfStream)
-                Thread.Sleep(50);
-
-            Log.Information("Playback complete");
-
-            mixer.Stop();
-            mixer.Dispose();
-        }
-        finally
-        {
-            OwnaudioNet.Shutdown();
-        }
+        Log.Information("Playback complete");
     }
 }

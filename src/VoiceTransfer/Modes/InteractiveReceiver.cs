@@ -1,7 +1,6 @@
 using System.Text;
-using Ownaudio.Core;
-using OwnaudioNET;
 using Serilog;
+using VoiceTransfer.Audio;
 using VoiceTransfer.Data;
 using VoiceTransfer.Logic;
 
@@ -13,10 +12,11 @@ namespace VoiceTransfer.Modes;
 ///
 /// Records from mic, passes audio through to speakers so you hear the
 /// caller, and extracts FSK data in the background.
+/// In loopback mode, captures system audio output directly (Windows only).
 /// </summary>
 public static class InteractiveReceiver
 {
-    public static void Run(int inputDevice, int outputDevice, TransmissionProfile profile, string? password = null)
+    public static void Run(IAudioBackend audio, int inputDevice, int outputDevice, TransmissionProfile profile, bool loopback = false, string? password = null)
     {
         profile.LogSettings();
 
@@ -31,30 +31,26 @@ public static class InteractiveReceiver
         var lastProcessedEnd = 0;
         var bufferLock = new object();
 
-        var config = new AudioConfig
-        {
-            SampleRate = Constants.SampleRate,
-            Channels = Constants.Channels,
-            EnableOutput = true,
-            EnableInput = true
-        };
+        IDisposable? session;
+        Func<float[], int> readFunc;
+        Action<float[], int>? passthroughFunc = null;
 
-        var inputs = OwnaudioNet.GetInputDevices();
-        if (inputDevice < inputs.Count)
+        if (loopback)
         {
-            config.InputDeviceId = inputs[inputDevice].DeviceId;
+            Log.Information("Loopback mode: capturing system audio output (WASAPI)");
+            var recorder = audio.CreateLoopbackRecorder()
+                ?? throw new PlatformNotSupportedException("Loopback not supported by current audio backend");
+            session = recorder;
+            readFunc = buf => recorder.Read(buf);
         }
-
-        var outputs = OwnaudioNet.GetOutputDevices();
-        if (outputDevice < outputs.Count)
+        else
         {
-            config.OutputDeviceId = outputs[outputDevice].DeviceId;
+            Log.Information("Audio passthrough: input [{In}] -> output [{Out}]", inputDevice, outputDevice);
+            var duplex = audio.CreateDuplex(inputDevice, outputDevice);
+            session = duplex;
+            readFunc = buf => duplex.Read(buf);
+            passthroughFunc = (buf, count) => duplex.Write(buf.AsSpan(0, count));
         }
-
-        Log.Information("Audio passthrough: input [{In}] -> output [{Out}]", inputDevice, outputDevice);
-
-        OwnaudioNet.Initialize(config);
-        OwnaudioNet.Start();
 
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
@@ -64,27 +60,26 @@ public static class InteractiveReceiver
             Log.Information("Shutting down receiver...");
         };
 
-        // I/O thread: receive from mic, pass through to speakers, feed ring buffer
+        // I/O thread: capture audio, optional passthrough, feed ring buffer
+        var readBuffer = new float[4096];
         var ioThread = new Thread(() =>
         {
             while (!cts.Token.IsCancellationRequested)
             {
-                var buffer = OwnaudioNet.Receive(out var sampleCount);
-                if (buffer != null && sampleCount > 0)
+                var sampleCount = readFunc(readBuffer);
+                if (sampleCount > 0)
                 {
-                    // Passthrough to speakers
-                    OwnaudioNet.Send(buffer.AsSpan(0, sampleCount));
+                    // Passthrough to speakers (non-loopback only)
+                    passthroughFunc?.Invoke(readBuffer, sampleCount);
 
                     // Feed ring buffer for FSK processing
                     lock (bufferLock)
                     {
                         CompactIfNeeded(ringBuffer, ref writePos, ref lastProcessedEnd, bufferCapacity, sampleCount);
                         var count = Math.Min(sampleCount, bufferCapacity - writePos);
-                        Array.Copy(buffer, 0, ringBuffer, writePos, count);
+                        Array.Copy(readBuffer, 0, ringBuffer, writePos, count);
                         writePos += count;
                     }
-
-                    OwnaudioNet.ReturnInputBuffer(buffer);
                 }
                 else
                 {
@@ -183,7 +178,7 @@ public static class InteractiveReceiver
         {
             cts.Cancel();
             ioThread.Join(2000);
-            OwnaudioNet.Shutdown();
+            session.Dispose();
         }
 
         Log.Information("Receiver stopped. Decoded {Count} messages", messageCount);

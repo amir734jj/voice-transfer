@@ -1,6 +1,6 @@
 using CommandLine;
 using Serilog;
-using VoiceTransfer;
+using VoiceTransfer.Audio;
 using VoiceTransfer.Commands;
 using VoiceTransfer.Modes;
 
@@ -30,19 +30,23 @@ try
     parser.ParseArguments<SendOptions, ReceiveOptions, LiveSendOptions, LiveReceiveOptions>(args)
         .WithParsed<SendOptions>(opts =>
         {
-            SenderMode.Run(opts.InputFile, opts.OutputWav, opts.DeviceIndex, opts.BuildProfile(), opts.Password);
+            var audio = AudioBackendFactory.Create();
+            SenderMode.Run(audio, opts.InputFile, opts.OutputWav, opts.DeviceIndex, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<ReceiveOptions>(opts =>
         {
-            ReceiverMode.Run(opts.OutputFile, opts.InputWav, opts.DeviceIndex, opts.TimeoutSeconds, opts.BuildProfile(), opts.Password);
+            var audio = AudioBackendFactory.Create();
+            ReceiverMode.Run(audio, opts.OutputFile, opts.InputWav, opts.DeviceIndex, opts.TimeoutSeconds, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<LiveSendOptions>(opts =>
         {
-            InteractiveSender.Run(opts.DeviceIndex, opts.BuildProfile(), opts.Password);
+            var audio = AudioBackendFactory.Create();
+            InteractiveSender.Run(audio, opts.DeviceIndex, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<LiveReceiveOptions>(opts =>
         {
-            InteractiveReceiver.Run(opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Password);
+            var audio = AudioBackendFactory.Create(opts.Loopback);
+            InteractiveReceiver.Run(audio, opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Loopback, opts.Password);
         })
         .WithNotParsed(_ => { }); // CommandLineParser already prints help
 }
