@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            artifact: VoiceTransfer-win-x64.exe
+            binary: VoiceTransfer.exe
+          - os: ubuntu-latest
+            rid: linux-x64
+            artifact: VoiceTransfer-linux-x64
+            binary: VoiceTransfer
+          - os: macos-latest
+            rid: osx-x64
+            artifact: VoiceTransfer-osx-x64
+            binary: VoiceTransfer
+          - os: macos-latest
+            rid: osx-arm64
+            artifact: VoiceTransfer-osx-arm64
+            binary: VoiceTransfer
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Publish
+        run: >
+          dotnet publish src/VoiceTransfer/VoiceTransfer.csproj
+          -c Release
+          -r ${{ matrix.rid }}
+          -p:EnableCompressionInSingleFile=true
+          -p:DebugType=none
+          -p:DebugSymbols=false
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          cp src/VoiceTransfer/bin/Release/net10.0/${{ matrix.rid }}/publish/${{ matrix.binary }} ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release v1.0.${{ github.run_number }}
+          generate_release_notes: true
+          files: artifacts/**/*
