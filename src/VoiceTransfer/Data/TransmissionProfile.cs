@@ -61,7 +61,7 @@ public class TransmissionProfile
 
     // --- Presets ---
 
-    public static TransmissionProfile Slow => new()
+    private static TransmissionProfile Slow => new()
     {
         BaudRate = 150,
         PreambleBits = 256,
@@ -73,7 +73,7 @@ public class TransmissionProfile
         FreqSpace = 1600.0, // 800 Hz separation for maximum resilience
     };
 
-    public static TransmissionProfile Normal => new()
+    private static TransmissionProfile Normal => new()
     {
         BaudRate = 300,
         PreambleBits = 128,
@@ -85,7 +85,7 @@ public class TransmissionProfile
         FreqSpace = 1800.0, // 400 Hz separation (standard)
     };
 
-    public static TransmissionProfile Fast => new()
+    private static TransmissionProfile Fast => new()
     {
         BaudRate = 350,
         PreambleBits = 64,
@@ -97,7 +97,7 @@ public class TransmissionProfile
         FreqSpace = 1800.0, // 400 Hz separation
     };
 
-    public static TransmissionProfile FromPreset(string name) => name.ToLowerInvariant() switch
+    private static TransmissionProfile FromPreset(string name) => name.ToLowerInvariant() switch
     {
         "slow" => Slow,
         "normal" => Normal,
@@ -136,7 +136,7 @@ public class TransmissionProfile
         return profile;
     }
 
-    public void Validate()
+    private void Validate()
     {
         if (BaudRate is < 50 or > 2400)
         {

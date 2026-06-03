@@ -8,15 +8,6 @@ using VoiceTransfer.Interfaces;
 
 namespace VoiceTransfer.Audio;
 
-public enum AudioEngineType
-{
-    Auto,
-    OwnAudio,
-    NAudio,
-    SoundFlow,
-    PortAudio
-}
-
 public static class AudioBackendFactory
 {
     public static IAudioBackend Create(AudioEngineType engine = AudioEngineType.Auto, bool loopback = false)

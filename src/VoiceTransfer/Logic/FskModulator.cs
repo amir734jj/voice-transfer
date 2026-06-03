@@ -65,11 +65,7 @@ public class FskModulator(TransmissionProfile profile)
     /// </summary>
     public static float[] Concat(params float[][] arrays)
     {
-        var total = 0;
-        foreach (var a in arrays)
-        {
-            total += a.Length;
-        }
+        var total = arrays.Sum(a => a.Length);
 
         var result = new float[total];
         var offset = 0;

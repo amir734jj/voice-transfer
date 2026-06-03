@@ -23,7 +23,7 @@ public class FskDemodulator(TransmissionProfile profile)
     public static double GoertzelPower(float[] samples, int offset, int length, double targetFreq)
     {
         // Map target frequency to the nearest DFT bin
-        var k = Math.Round((double)length * targetFreq / Constants.SampleRate);
+        var k = Math.Round(length * targetFreq / Constants.SampleRate);
         var omega = 2.0 * Math.PI * k / length;
         var coeff = 2.0 * Math.Cos(omega);
 

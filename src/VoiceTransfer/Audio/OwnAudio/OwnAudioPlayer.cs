@@ -39,7 +39,7 @@ internal sealed class OwnAudioPlayer : IAudioPlayer
     {
         var offset = 0;
         var sw = Stopwatch.StartNew();
-        var samplesPerMs = (double)Constants.SampleRate / 1000.0;
+        const double samplesPerMs = Constants.SampleRate / 1000.0;
 
         while (offset < samples.Length)
         {
@@ -61,7 +61,9 @@ internal sealed class OwnAudioPlayer : IAudioPlayer
         var totalMs = samples.Length / samplesPerMs;
         var remainingMs = totalMs - sw.Elapsed.TotalMilliseconds;
         if (remainingMs > 0)
+        {
             Thread.Sleep((int)remainingMs + 50);
+        }
     }
 
     public void Dispose()
