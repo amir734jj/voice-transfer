@@ -12,27 +12,6 @@ Covert data-over-voice transmission tool. Uses FSK (Frequency-Shift Keying) modu
 - **Voice passthrough** — in live-receive mode, human voice audio passes through to speakers while FSK data is decoded in parallel
 - **Speed presets** — `slow` (150 baud), `normal` (300 baud), `fast` (350 baud), with full parameter override
 
-## Requirements
-
-- .NET 10 SDK
-- Windows (NAudio for audio I/O)
-
-## Build
-
-```bash
-dotnet build src/VoiceTransfer/VoiceTransfer.csproj
-```
-
-Publish a self-contained single-file binary:
-
-```bash
-# Windows
-dotnet publish src/VoiceTransfer/VoiceTransfer.csproj -c Release -r win-x64
-
-# Linux
-dotnet publish src/VoiceTransfer/VoiceTransfer.csproj -c Release -r linux-x64
-```
-
 ## Usage
 
 ### Send a file
