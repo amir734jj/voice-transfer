@@ -39,7 +39,10 @@ public sealed class SoundFlowBackend : IAudioBackend
     public IAudioRecorder? CreateLoopbackRecorder()
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
             return null;
+        }
+
         return new SoundFlowLoopbackRecorder();
     }
 

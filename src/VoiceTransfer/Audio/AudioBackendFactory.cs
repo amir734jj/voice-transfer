@@ -47,7 +47,10 @@ public static class AudioBackendFactory
     private static IAudioBackend RequireWindows(IAudioBackend backend)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
             throw new PlatformNotSupportedException("NAudio backend requires Windows");
+        }
+
         return backend;
     }
 }

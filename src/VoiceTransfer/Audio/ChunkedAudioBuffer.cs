@@ -20,7 +20,10 @@ internal sealed class ChunkedAudioBuffer
         if (_pos >= _current.Length)
         {
             if (!_chunks.TryDequeue(out var next))
+            {
                 return 0;
+            }
+
             _current = next;
             _pos = 0;
         }
