@@ -13,11 +13,12 @@ internal sealed class OwnAudioDuplex : IAudioDuplex
         {
             SampleRate = Constants.SampleRate,
             Channels = Constants.Channels,
+            BufferSize = 512,
             EnableOutput = true,
             EnableInput = true
         };
 
-        OwnaudioNet.Initialize(config);
+        OwnaudioNet.Initialize(config, bufferMultiplier: 16);
         var inputs = OwnaudioNet.GetInputDevices();
         var outputs = OwnaudioNet.GetOutputDevices();
         var needReinit = false;
@@ -37,7 +38,7 @@ internal sealed class OwnAudioDuplex : IAudioDuplex
         if (needReinit)
         {
             OwnaudioNet.Shutdown();
-            OwnaudioNet.Initialize(config);
+            OwnaudioNet.Initialize(config, bufferMultiplier: 16);
         }
 
         OwnaudioNet.Start();

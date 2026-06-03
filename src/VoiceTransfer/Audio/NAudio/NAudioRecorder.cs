@@ -15,7 +15,7 @@ internal sealed class NAudioRecorder : IAudioRecorder
         {
             DeviceNumber = deviceIndex,
             WaveFormat = WaveFormat.CreateIeeeFloatWaveFormat(Constants.SampleRate, Constants.Channels),
-            BufferMilliseconds = 50
+            BufferMilliseconds = 20
         };
         _waveIn.DataAvailable += (_, e) =>
         {

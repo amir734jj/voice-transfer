@@ -13,17 +13,18 @@ internal sealed class OwnAudioRecorder : IAudioRecorder
         {
             SampleRate = Constants.SampleRate,
             Channels = Constants.Channels,
+            BufferSize = 512,
             EnableOutput = false,
             EnableInput = true
         };
 
-        OwnaudioNet.Initialize(config);
+        OwnaudioNet.Initialize(config, bufferMultiplier: 16);
         var inputs = OwnaudioNet.GetInputDevices();
         if (inputDeviceIndex < inputs.Count)
         {
             OwnaudioNet.Shutdown();
             config.InputDeviceId = inputs[inputDeviceIndex].DeviceId;
-            OwnaudioNet.Initialize(config);
+            OwnaudioNet.Initialize(config, bufferMultiplier: 16);
         }
 
         OwnaudioNet.Start();

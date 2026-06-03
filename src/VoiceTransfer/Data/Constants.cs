@@ -7,7 +7,7 @@ namespace VoiceTransfer.Data;
 public static class Constants
 {
     // Audio format (fixed -- must match on both sides by definition)
-    public const int SampleRate = 44100;
+    public const int SampleRate = 48000;
     public const int Channels = 1;
     public const int BitsPerSample = 16;
 

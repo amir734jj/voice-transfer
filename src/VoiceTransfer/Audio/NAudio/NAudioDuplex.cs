@@ -19,7 +19,7 @@ internal sealed class NAudioDuplex : IAudioDuplex
         {
             DeviceNumber = inputDeviceIndex,
             WaveFormat = format,
-            BufferMilliseconds = 50
+            BufferMilliseconds = 20
         };
         _waveIn.DataAvailable += (_, e) =>
         {

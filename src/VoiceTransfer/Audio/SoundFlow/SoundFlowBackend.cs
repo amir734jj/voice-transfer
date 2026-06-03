@@ -69,35 +69,36 @@ internal sealed class SoundFlowPlayer : IAudioPlayer
         _engine = new MiniAudioEngine();
         _format = SoundFlowBackend.MakeFormat();
 
+        // Initialize device with stereo format since most hardware devices require stereo.
+        // Our mono samples get upmixed to stereo in GenerateAudio via the channels parameter.
+        var deviceFormat = new AudioFormat
+        {
+            SampleRate = Constants.SampleRate,
+            Channels = 2,
+            Format = SampleFormat.F32,
+            Layout = ChannelLayout.Stereo
+        };
+
         _engine.UpdateAudioDevicesInfo();
         var deviceInfo = outputDeviceIndex < _engine.PlaybackDevices.Length
             ? _engine.PlaybackDevices[outputDeviceIndex]
             : (DeviceInfo?)null;
 
-        _device = _engine.InitializePlaybackDevice(deviceInfo, _format);
+        _device = _engine.InitializePlaybackDevice(deviceInfo, deviceFormat);
         _device.Start();
     }
 
     public void Play(float[] samples)
     {
-        var provider = new RawDataProvider(samples, _format.SampleRate);
-        var player = new SoundPlayer(_engine, _format, provider);
+        using var done = new ManualResetEventSlim(false);
+        var source = new FloatBufferSource(_engine, _format, samples, () => done.Set());
 
-        _device.MasterMixer.AddComponent(player);
-        player.Play();
+        _device.MasterMixer.AddComponent(source);
 
-        // Poll until all samples have been consumed by the audio engine
-        while (provider.Position < provider.Length)
-        {
-            Thread.Sleep(10);
-        }
+        done.Wait();
 
-        // Let the last buffer reach the hardware
-        Thread.Sleep(50);
-
-        _device.MasterMixer.RemoveComponent(player);
-        player.Dispose();
-        provider.Dispose();
+        _device.MasterMixer.RemoveComponent(source);
+        source.Dispose();
     }
 
     public void Dispose()
@@ -105,6 +106,60 @@ internal sealed class SoundFlowPlayer : IAudioPlayer
         _device.Stop();
         _device.Dispose();
         _engine.Dispose();
+    }
+}
+
+/// <summary>
+/// Minimal SoundComponent that feeds float samples directly into the mixer's GenerateAudio path.
+/// Avoids the SoundPlayer/DataProvider layer which has format conversion issues.
+/// </summary>
+internal sealed class FloatBufferSource : SoundComponent
+{
+    private readonly float[] _samples;
+    private readonly Action _onComplete;
+    private int _position;
+
+    public FloatBufferSource(AudioEngine engine, AudioFormat format, float[] samples, Action onComplete)
+        : base(engine, format)
+    {
+        _samples = samples;
+        _onComplete = onComplete;
+    }
+
+    protected override void GenerateAudio(Span<float> buffer, int channels)
+    {
+        var remaining = _samples.Length - _position;
+        if (remaining <= 0)
+        {
+            buffer.Clear();
+            _onComplete();
+            return;
+        }
+
+        // For mono source into potentially multi-channel output,
+        // write one sample per frame, repeat across channels
+        var frames = buffer.Length / channels;
+        var toCopy = Math.Min(frames, remaining);
+
+        for (var i = 0; i < toCopy; i++)
+        {
+            var sample = _samples[_position++];
+            for (var ch = 0; ch < channels; ch++)
+            {
+                buffer[i * channels + ch] = sample;
+            }
+        }
+
+        // Zero-fill remaining frames
+        for (var i = toCopy * channels; i < buffer.Length; i++)
+        {
+            buffer[i] = 0;
+        }
+
+        if (_position >= _samples.Length)
+        {
+            _onComplete();
+        }
     }
 }
 
