@@ -232,7 +232,7 @@ public static class FrameCodec
             var base64 = Encoding.ASCII.GetString(b64Bytes);
             return Convert.FromBase64String(base64);
         }
-        catch
+        catch (FormatException)
         {
             return null;
         }

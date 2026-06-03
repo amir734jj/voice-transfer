@@ -85,7 +85,6 @@ public static class Fec
 
         var blockSize = repeatFactor;
         var numBlocks = bits.Length / blockSize;
-        var remainder = bits.Length % blockSize;
 
         // Only interleave complete blocks
         var interleaved = new bool[bits.Length];
@@ -118,7 +117,6 @@ public static class Fec
 
         var blockSize = repeatFactor;
         var numBlocks = bits.Length / blockSize;
-        var remainder = bits.Length % blockSize;
 
         var deinterleaved = new bool[bits.Length];
         for (var col = 0; col < blockSize; col++)

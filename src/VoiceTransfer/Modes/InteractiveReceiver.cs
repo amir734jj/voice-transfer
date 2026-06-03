@@ -180,6 +180,7 @@ public static class InteractiveReceiver
             cts.Cancel();
             ioThread.Join(2000);
             session.Dispose();
+            cts.Dispose();
         }
 
         Log.Information("Receiver stopped. Decoded {Count} messages", messageCount);

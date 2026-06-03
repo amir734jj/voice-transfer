@@ -3,8 +3,9 @@ using System.Collections.Concurrent;
 namespace VoiceTransfer.Audio;
 
 /// <summary>
-/// Thread-safe chunked audio buffer. Producers enqueue float[] chunks;
-/// consumers read sequentially via <see cref="Read"/>.
+/// Chunked audio buffer. Producers enqueue float[] chunks via a ConcurrentQueue;
+/// a single consumer reads sequentially via <see cref="Read"/>.
+/// Thread-safe for single consumer, multiple producers.
 /// Shared by all recorder and duplex implementations to avoid duplication.
 /// </summary>
 internal sealed class ChunkedAudioBuffer

@@ -27,7 +27,7 @@ try
 {
     await CheckForUpdates();
 
-    var parser = new Parser(settings =>
+    using var parser = new Parser(settings =>
     {
         settings.HelpWriter = Console.Error;
         settings.CaseInsensitiveEnumValues = true;
