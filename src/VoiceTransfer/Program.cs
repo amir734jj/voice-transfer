@@ -52,7 +52,7 @@ try
         .WithParsed<LiveReceiveOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine, opts.Loopback);
-            InteractiveReceiver.Run(audio, opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Loopback, opts.Password);
+            InteractiveReceiver.Run(audio, opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Loopback, opts.Passthrough, opts.Password);
         })
         .WithParsed<TestOptions>(opts =>
         {

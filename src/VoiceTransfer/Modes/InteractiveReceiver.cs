@@ -17,7 +17,7 @@ namespace VoiceTransfer.Modes;
 /// </summary>
 public static class InteractiveReceiver
 {
-    public static void Run(IAudioBackend audio, int inputDevice, int outputDevice, TransmissionProfile profile, bool loopback = false, string? password = null)
+    public static void Run(IAudioBackend audio, int inputDevice, int outputDevice, TransmissionProfile profile, bool loopback = false, bool passthrough = false, string? password = null)
     {
         profile.LogSettings();
 
@@ -44,13 +44,20 @@ public static class InteractiveReceiver
             session = recorder;
             readFunc = buf => recorder.Read(buf);
         }
-        else
+        else if (passthrough)
         {
-            Log.Information("Audio passthrough: input [{In}] -> output [{Out}]", inputDevice, outputDevice);
+            Log.Information("Audio passthrough: input [{In}] -> output [{Out}] (use headphones to avoid feedback)", inputDevice, outputDevice);
             var duplex = audio.CreateDuplex(inputDevice, outputDevice);
             session = duplex;
             readFunc = buf => duplex.Read(buf);
             passthroughFunc = (buf, count) => duplex.Write(buf.AsSpan(0, count));
+        }
+        else
+        {
+            Log.Information("Recording from input device [{In}]", inputDevice);
+            var recorder = audio.CreateRecorder(inputDevice);
+            session = recorder;
+            readFunc = buf => recorder.Read(buf);
         }
 
         var cts = new CancellationTokenSource();
