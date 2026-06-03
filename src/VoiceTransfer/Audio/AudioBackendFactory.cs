@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Serilog;
 using VoiceTransfer.Audio.NAudio;
 using VoiceTransfer.Audio.OwnAudio;
 using VoiceTransfer.Audio.SoundFlow;
@@ -34,8 +35,8 @@ public static class AudioBackendFactory
         {
             if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
-                throw new PlatformNotSupportedException(
-                    "Loopback capture requires Windows (WASAPI). On Linux/macOS, use a virtual audio cable instead");
+                Log.Error("Loopback capture requires Windows (WASAPI). On Linux/macOS, use a virtual audio cable instead");
+                Environment.Exit(1);
             }
 
             return new NAudioBackend();
