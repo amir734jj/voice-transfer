@@ -17,6 +17,7 @@ internal sealed class OwnAudioPlayer : IAudioPlayer
         {
             SampleRate = Constants.SampleRate,
             Channels = Constants.Channels,
+            BufferSize = 256,
             EnableOutput = true,
             EnableInput = false
         };
@@ -44,7 +45,7 @@ internal sealed class OwnAudioPlayer : IAudioPlayer
 
         while (!source.IsEndOfStream)
         {
-            Thread.Sleep(50);
+            Thread.Sleep(5);
         }
 
         _mixer.RemoveSource(source);

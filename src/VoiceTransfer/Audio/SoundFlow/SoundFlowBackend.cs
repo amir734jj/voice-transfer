@@ -81,21 +81,23 @@ internal sealed class SoundFlowPlayer : IAudioPlayer
     public void Play(float[] samples)
     {
         using var done = new ManualResetEventSlim(false);
-        var provider = new RawDataProvider(samples, _format.SampleRate);
-        var player = new SoundPlayer(_engine, _format, provider);
+        var queue = new QueueDataProvider(_format);
+        var player = new SoundPlayer(_engine, _format, queue);
 
         try
         {
             player.PlaybackEnded += (_, _) => done.Set();
             _device.MasterMixer.AddComponent(player);
             player.Play();
+            queue.AddSamples(samples);
+            queue.CompleteAdding();
             done.Wait();
             _device.MasterMixer.RemoveComponent(player);
         }
         finally
         {
             player.Dispose();
-            provider.Dispose();
+            queue.Dispose();
         }
     }
 
