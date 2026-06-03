@@ -11,7 +11,6 @@ namespace VoiceTransfer.Modes;
 /// Interactive sender: reads lines from the console and transmits each one
 /// as a separate FSK frame through the audio output in real-time.
 /// Each line is encoded, modulated, stealth-shaped, and played immediately.
-/// Supports up/down arrow keys to recall previous messages.
 /// </summary>
 public static class InteractiveSender
 {
@@ -33,13 +32,11 @@ public static class InteractiveSender
             Log.Information("Shutting down sender...");
         };
 
-        var history = new List<string>();
-        var historyIndex = -1;
+        ReadLine.HistoryEnabled = true;
 
         while (true)
         {
-            Console.Write("> ");
-            var line = ReadLineWithHistory(history, ref historyIndex);
+            var line = ReadLine.Read("> ");
             if (line == null)
             {
                 break; // EOF / Ctrl+C
@@ -50,8 +47,7 @@ public static class InteractiveSender
                 continue;
             }
 
-            history.Add(line);
-            historyIndex = history.Count;
+            ReadLine.AddHistory(line);
 
             var data = Encoding.UTF8.GetBytes(line);
 
@@ -71,141 +67,6 @@ public static class InteractiveSender
                 data.Length, bits.Length, duration);
 
             player.Play(all);
-        }
-    }
-
-    private static string? ReadLineWithHistory(List<string> history, ref int historyIndex)
-    {
-        var buffer = new StringBuilder();
-        var cursorPos = 0;
-
-        while (true)
-        {
-            var key = Console.ReadKey(intercept: true);
-
-            switch (key.Key)
-            {
-                case ConsoleKey.Enter:
-                    Console.WriteLine();
-                    return buffer.ToString();
-
-                case ConsoleKey.UpArrow:
-                    if (history.Count > 0 && historyIndex > 0)
-                    {
-                        historyIndex--;
-                        ReplaceBuffer(buffer, ref cursorPos, history[historyIndex]);
-                    }
-                    break;
-
-                case ConsoleKey.DownArrow:
-                    if (historyIndex < history.Count - 1)
-                    {
-                        historyIndex++;
-                        ReplaceBuffer(buffer, ref cursorPos, history[historyIndex]);
-                    }
-                    else
-                    {
-                        historyIndex = history.Count;
-                        ReplaceBuffer(buffer, ref cursorPos, "");
-                    }
-                    break;
-
-                case ConsoleKey.LeftArrow:
-                    if (cursorPos > 0)
-                    {
-                        cursorPos--;
-                        SafeSetCursor(Console.CursorLeft - 1);
-                    }
-                    break;
-
-                case ConsoleKey.RightArrow:
-                    if (cursorPos < buffer.Length)
-                    {
-                        cursorPos++;
-                        SafeSetCursor(Console.CursorLeft + 1);
-                    }
-                    break;
-
-                case ConsoleKey.Home:
-                    SafeSetCursor(Math.Max(0, Console.CursorLeft - cursorPos));
-                    cursorPos = 0;
-                    break;
-
-                case ConsoleKey.End:
-                    SafeSetCursor(Console.CursorLeft + (buffer.Length - cursorPos));
-                    cursorPos = buffer.Length;
-                    break;
-
-                case ConsoleKey.Backspace:
-                    if (cursorPos > 0)
-                    {
-                        buffer.Remove(cursorPos - 1, 1);
-                        cursorPos--;
-                        RedrawFromCursor(buffer, cursorPos);
-                    }
-                    break;
-
-                case ConsoleKey.Delete:
-                    if (cursorPos < buffer.Length)
-                    {
-                        buffer.Remove(cursorPos, 1);
-                        RedrawFromCursor(buffer, cursorPos);
-                    }
-                    break;
-
-                default:
-                    if (key.KeyChar >= ' ')
-                    {
-                        buffer.Insert(cursorPos, key.KeyChar);
-                        cursorPos++;
-                        RedrawFromCursor(buffer, cursorPos);
-                    }
-                    else if (key.KeyChar == '\0' || key.KeyChar == 27)
-                    {
-                        // Ignore control/escape sequences
-                    }
-                    else if (key.KeyChar == 3) // Ctrl+C
-                    {
-                        Console.WriteLine();
-                        return null;
-                    }
-                    break;
-            }
-        }
-    }
-
-    private static void ReplaceBuffer(StringBuilder buffer, ref int cursorPos, string newText)
-    {
-        var promptCol = Math.Max(0, Console.CursorLeft - cursorPos);
-        SafeSetCursor(promptCol);
-        Console.Write(new string(' ', buffer.Length));
-        SafeSetCursor(promptCol);
-        Console.Write(newText);
-
-        buffer.Clear();
-        buffer.Append(newText);
-        cursorPos = newText.Length;
-    }
-
-    private static void RedrawFromCursor(StringBuilder buffer, int cursorPos)
-    {
-        var startCol = Math.Max(0, Console.CursorLeft - cursorPos);
-        SafeSetCursor(startCol);
-        Console.Write(buffer);
-        Console.Write(' '); // clear trailing char
-        SafeSetCursor(startCol + cursorPos);
-    }
-
-    private static void SafeSetCursor(int col)
-    {
-        try
-        {
-            var maxCol = Console.BufferWidth > 0 ? Console.BufferWidth - 1 : 0;
-            Console.SetCursorPosition(Math.Clamp(col, 0, maxCol), Console.CursorTop);
-        }
-        catch (IOException)
-        {
-            // Console may not support cursor positioning (e.g. redirected output)
         }
     }
 }
