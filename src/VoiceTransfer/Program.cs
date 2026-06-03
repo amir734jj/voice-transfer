@@ -33,7 +33,7 @@ try
         settings.CaseInsensitiveEnumValues = true;
     });
 
-    parser.ParseArguments<SendOptions, ReceiveOptions, LiveSendOptions, LiveReceiveOptions>(args)
+    parser.ParseArguments<SendOptions, ReceiveOptions, LiveSendOptions, LiveReceiveOptions, TestOptions>(args)
         .WithParsed<SendOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
@@ -54,6 +54,11 @@ try
             var audio = AudioBackendFactory.Create(opts.AudioEngine, opts.Loopback);
             InteractiveReceiver.Run(audio, opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Loopback, opts.Password);
         })
+        .WithParsed<TestOptions>(opts =>
+        {
+            var audio = AudioBackendFactory.Create(opts.AudioEngine);
+            TestMode.Run(audio, opts.DeviceIndex, opts.OutputDeviceIndex, opts.Duration);
+        })
         .WithNotParsed(_ => { }); // CommandLineParser already prints help
 }
 catch (Exception ex)
@@ -72,11 +77,15 @@ async Task CheckForUpdates()
     {
         var mgr = new UpdateManager(new GithubSource("https://github.com/amir734jj/voice-transfer", null, false));
         if (!mgr.IsInstalled)
+        {
             return;
+        }
 
         var newVersion = await mgr.CheckForUpdatesAsync();
         if (newVersion == null)
+        {
             return;
+        }
 
         Log.Information("Downloading update v{Version}", newVersion.TargetFullRelease.Version);
         await mgr.DownloadUpdatesAsync(newVersion);
