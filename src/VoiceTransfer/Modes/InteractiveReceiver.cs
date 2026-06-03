@@ -1,5 +1,6 @@
 using System.Text;
-using NAudio.Wave;
+using Ownaudio.Core;
+using OwnaudioNET;
 using Serilog;
 using VoiceTransfer.Data;
 using VoiceTransfer.Logic;
@@ -10,16 +11,12 @@ namespace VoiceTransfer.Modes;
 /// Interactive receiver: continuously captures audio, detects FSK frames
 /// in real-time, and prints decoded text to the console.
 ///
-/// Two input modes:
-///   1. Microphone (default): records from mic, passes audio through to
-///      speakers so you hear the caller, and extracts FSK in background.
-///   2. Loopback (--loopback): captures system audio output directly via
-///      WASAPI loopback -- ideal for same-machine testing where sender and
-///      receiver run on the same PC without a physical mic/speaker path.
+/// Records from mic, passes audio through to speakers so you hear the
+/// caller, and extracts FSK data in the background.
 /// </summary>
 public static class InteractiveReceiver
 {
-    public static void Run(int inputDevice, int outputDevice, TransmissionProfile profile, bool loopback = false, string? password = null)
+    public static void Run(int inputDevice, int outputDevice, TransmissionProfile profile, string? password = null)
     {
         profile.LogSettings();
 
@@ -34,83 +31,26 @@ public static class InteractiveReceiver
         var lastProcessedEnd = 0;
         var bufferLock = new object();
 
-        // Shared callback: feed mono float samples into the ring buffer
-        void FeedRingBuffer(float[] samples)
+        var config = new AudioConfig
         {
-            lock (bufferLock)
-            {
-                CompactIfNeeded(ringBuffer, ref writePos, ref lastProcessedEnd, bufferCapacity, samples.Length);
-                var count = Math.Min(samples.Length, bufferCapacity - writePos);
-                Array.Copy(samples, 0, ringBuffer, writePos, count);
-                writePos += count;
-            }
-        }
+            SampleRate = Constants.SampleRate,
+            Channels = Constants.Channels,
+            EnableOutput = true,
+            EnableInput = true
+        };
 
-        IWaveIn waveIn;
-        WaveOutEvent? waveOut = null;
+        var inputs = OwnaudioNet.GetInputDevices();
+        if (inputDevice < inputs.Count)
+            config.InputDeviceId = inputs[inputDevice].DeviceId;
 
-        if (loopback)
-        {
-            var capture = new WasapiLoopbackCapture();
-            waveIn = capture;
-            var fmt = capture.WaveFormat;
-            Log.Information("WASAPI loopback mode (capturing system audio output)");
-            Log.Information("Capture format: {Rate}Hz, {Bits}-bit, {Ch}ch",
-                fmt.SampleRate, fmt.BitsPerSample, fmt.Channels);
+        var outputs = OwnaudioNet.GetOutputDevices();
+        if (outputDevice < outputs.Count)
+            config.OutputDeviceId = outputs[outputDevice].DeviceId;
 
-            capture.DataAvailable += (_, e) =>
-            {
-                var samples = ResampleToMono(e.Buffer, e.BytesRecorded, fmt);
-                if (samples.Length > 0) FeedRingBuffer(samples);
-            };
-        }
-        else
-        {
-            var inFormat = new WaveFormat(Constants.SampleRate, 16, Constants.Channels);
-            var waveInEvent = new WaveInEvent
-            {
-                DeviceNumber = inputDevice,
-                WaveFormat = inFormat,
-                BufferMilliseconds = 100
-            };
-            waveIn = waveInEvent;
+        Log.Information("Audio passthrough: input [{In}] -> output [{Out}]", inputDevice, outputDevice);
 
-            // Audio passthrough so user hears the caller
-            var outFormat = WaveFormat.CreateIeeeFloatWaveFormat(Constants.SampleRate, Constants.Channels);
-            var passthrough = new BufferedWaveProvider(outFormat)
-            {
-                BufferLength = Constants.SampleRate * 4 * 5,
-                ReadFully = true,
-                DiscardOnBufferOverflow = true
-            };
-            waveOut = new WaveOutEvent
-            {
-                DeviceNumber = outputDevice,
-                DesiredLatency = 150
-            };
-            waveOut.Init(passthrough);
-            waveOut.Play();
-
-            Log.Information("Audio passthrough: input [{In}] -> output [{Out}]", inputDevice, outputDevice);
-
-            waveInEvent.DataAvailable += (_, e) =>
-            {
-                var sampleCount = e.BytesRecorded / 2;
-
-                // Convert 16-bit PCM to float and pass through to speakers
-                var monoSamples = new float[sampleCount];
-                var floatBuf = new byte[sampleCount * 4];
-                for (var i = 0; i < sampleCount; i++)
-                {
-                    var sample = BitConverter.ToInt16(e.Buffer, i * 2) / 32768f;
-                    monoSamples[i] = sample;
-                    BitConverter.TryWriteBytes(floatBuf.AsSpan(i * 4), sample);
-                }
-                passthrough.AddSamples(floatBuf, 0, floatBuf.Length);
-
-                FeedRingBuffer(monoSamples);
-            };
-        }
+        OwnaudioNet.Initialize(config);
+        OwnaudioNet.Start();
 
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (_, e) =>
@@ -120,7 +60,39 @@ public static class InteractiveReceiver
             Log.Information("Shutting down receiver...");
         };
 
-        waveIn.StartRecording();
+        // I/O thread: receive from mic, pass through to speakers, feed ring buffer
+        var ioThread = new Thread(() =>
+        {
+            while (!cts.Token.IsCancellationRequested)
+            {
+                var buffer = OwnaudioNet.Receive(out var sampleCount);
+                if (buffer != null && sampleCount > 0)
+                {
+                    // Passthrough to speakers
+                    OwnaudioNet.Send(buffer.AsSpan(0, sampleCount));
+
+                    // Feed ring buffer for FSK processing
+                    lock (bufferLock)
+                    {
+                        CompactIfNeeded(ringBuffer, ref writePos, ref lastProcessedEnd, bufferCapacity, sampleCount);
+                        var count = Math.Min(sampleCount, bufferCapacity - writePos);
+                        Array.Copy(buffer, 0, ringBuffer, writePos, count);
+                        writePos += count;
+                    }
+
+                    OwnaudioNet.ReturnInputBuffer(buffer);
+                }
+                else
+                {
+                    Thread.Sleep(1);
+                }
+            }
+        })
+        {
+            IsBackground = true
+        };
+
+        ioThread.Start();
 
         var processIntervalMs = 500;
         var messageCount = 0;
@@ -198,10 +170,9 @@ public static class InteractiveReceiver
         }
         finally
         {
-            waveIn.StopRecording();
-            waveIn.Dispose();
-            waveOut?.Stop();
-            waveOut?.Dispose();
+            cts.Cancel();
+            ioThread.Join(2000);
+            OwnaudioNet.Shutdown();
         }
 
         Log.Information("Receiver stopped. Decoded {Count} messages.", messageCount);
@@ -218,58 +189,6 @@ public static class InteractiveReceiver
             writePos = keep;
             lastProcessedEnd = Math.Max(0, lastProcessedEnd - discard);
         }
-    }
-
-    /// <summary>
-    /// Convert raw WASAPI capture bytes to mono float samples, resampled to our target rate.
-    /// Handles various bit depths, channel counts, and sample rate differences.
-    /// </summary>
-    private static float[] ResampleToMono(byte[] buffer, int bytesRecorded, WaveFormat format)
-    {
-        var bytesPerSample = format.BitsPerSample / 8;
-        var frameSize = bytesPerSample * format.Channels;
-        var frameCount = bytesRecorded / frameSize;
-        if (frameCount == 0) return [];
-
-        var ratio = (double)Constants.SampleRate / format.SampleRate;
-        var outFrames = (int)(frameCount * ratio);
-        var result = new float[outFrames];
-
-        for (var i = 0; i < outFrames; i++)
-        {
-            var srcPos = i / ratio;
-            var srcIdx = Math.Min((int)srcPos, frameCount - 1);
-            var frac = srcPos - srcIdx;
-
-            var s0 = ReadMonoFrame(buffer, srcIdx, format, bytesPerSample, frameSize);
-            var s1 = srcIdx + 1 < frameCount
-                ? ReadMonoFrame(buffer, srcIdx + 1, format, bytesPerSample, frameSize) : s0;
-            result[i] = (float)(s0 + (s1 - s0) * frac);
-        }
-
-        return result;
-    }
-
-    private static float ReadMonoFrame(byte[] buffer, int frameIndex, WaveFormat format, int bytesPerSample, int frameSize)
-    {
-        var offset = frameIndex * frameSize;
-
-        float sum = 0;
-        for (var ch = 0; ch < format.Channels; ch++)
-        {
-            var pos = offset + ch * bytesPerSample;
-            if (pos + bytesPerSample > buffer.Length) break;
-
-            var sample = format.BitsPerSample switch
-            {
-                32 when format.Encoding == WaveFormatEncoding.IeeeFloat =>
-                    BitConverter.ToSingle(buffer, pos),
-                16 => BitConverter.ToInt16(buffer, pos) / 32768f,
-                _ => 0
-            };
-            sum += sample;
-        }
-        return sum / format.Channels;
     }
 
     /// <summary>

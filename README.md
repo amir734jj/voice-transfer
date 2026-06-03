@@ -4,6 +4,7 @@ Covert data-over-voice transmission tool. Uses FSK (Frequency-Shift Keying) modu
 
 ## Features
 
+- **Cross-platform** — runs on Windows, macOS, and Linux (via OwnAudioSharp/PortAudio)
 - **File transfer over audio** — send any file as FSK tones through speakers/microphone or WAV files
 - **Live interactive mode** — type text lines and transmit them in real-time; receiver prints decoded text as it arrives
 - **AES-256-GCM encryption** — optional password-based authenticated encryption

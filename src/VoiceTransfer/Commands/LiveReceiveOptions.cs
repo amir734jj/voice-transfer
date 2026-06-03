@@ -10,7 +10,4 @@ internal class LiveReceiveOptions : ProfileOptions
 
     [Option("output-device", Default = 0, HelpText = "Audio output device index (speakers, for voice passthrough).")]
     public int OutputDeviceIndex { get; set; }
-
-    [Option("loopback", Default = false, HelpText = "Use WASAPI loopback capture (captures system audio output directly -- for same-machine testing).")]
-    public bool Loopback { get; set; }
 }

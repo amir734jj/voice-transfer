@@ -1,4 +1,7 @@
-using NAudio.Wave;
+using Ownaudio.Core;
+using OwnaudioNET;
+using OwnaudioNET.Mixing;
+using OwnaudioNET.Sources;
 using Serilog;
 using VoiceTransfer.Data;
 using VoiceTransfer.Logic;
@@ -62,7 +65,7 @@ public static class SenderMode
         // 4. Output
         if (outputWav != null)
         {
-            WriteWav(outputWav, allSamples);
+            WavFile.Write(outputWav, allSamples, Constants.SampleRate, Constants.Channels);
             Log.Information("Written to {File}", outputWav);
         }
         else
@@ -71,50 +74,48 @@ public static class SenderMode
         }
     }
 
-    private static void WriteWav(string path, float[] samples)
-    {
-        var format = WaveFormat.CreateIeeeFloatWaveFormat(Constants.SampleRate, Constants.Channels);
-        using var writer = new WaveFileWriter(path, format);
-
-        foreach (var s in samples)
-        {
-            writer.WriteSample(Math.Clamp(s, -1f, 1f));
-        }
-    }
-
     private static void PlayAudio(float[] samples, int deviceIndex)
     {
         Log.Information("Using audio output device index {Index}", deviceIndex);
 
-        var format = WaveFormat.CreateIeeeFloatWaveFormat(Constants.SampleRate, Constants.Channels);
-        var provider = new BufferedWaveProvider(format)
+        var config = new AudioConfig
         {
-            BufferLength = samples.Length * 4 + 4096,
-            ReadFully = false
+            SampleRate = Constants.SampleRate,
+            Channels = Constants.Channels,
+            EnableOutput = true,
+            EnableInput = false
         };
 
-        // Write float samples as bytes
-        var buffer = new byte[samples.Length * 4];
-        Buffer.BlockCopy(samples, 0, buffer, 0, buffer.Length);
-        provider.AddSamples(buffer, 0, buffer.Length);
+        var outputs = OwnaudioNet.GetOutputDevices();
+        if (deviceIndex < outputs.Count)
+            config.OutputDeviceId = outputs[deviceIndex].DeviceId;
 
-        using var waveOut = new WaveOutEvent
+        OwnaudioNet.Initialize(config);
+        OwnaudioNet.Start();
+
+        try
         {
-            DeviceNumber = deviceIndex,
-            DesiredLatency = 200
-        };
+            var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
+            mixer.Start();
 
-        var done = new ManualResetEventSlim(false);
-        waveOut.PlaybackStopped += (_, _) => done.Set();
+            var source = new SampleSource(samples, OwnaudioNet.Engine!.Config);
+            mixer.AddSource(source);
+            source.Play();
 
-        waveOut.Init(provider);
-        waveOut.Play();
+            var durationSec = (double)samples.Length / Constants.SampleRate;
+            Log.Information("Playing FSK audio ({Duration:F1}s)... Press Ctrl+C to abort.", durationSec);
 
-        var durationSec = (double)samples.Length / Constants.SampleRate;
-        Log.Information("Playing FSK audio ({Duration:F1}s)... Press Ctrl+C to abort.", durationSec);
+            while (!source.IsEndOfStream)
+                Thread.Sleep(50);
 
-        // Wait for playback to finish
-        done.Wait(TimeSpan.FromSeconds(durationSec + 2));
-        Log.Information("Playback complete.");
+            Log.Information("Playback complete.");
+
+            mixer.Stop();
+            mixer.Dispose();
+        }
+        finally
+        {
+            OwnaudioNet.Shutdown();
+        }
     }
 }

@@ -42,7 +42,7 @@ try
         })
         .WithParsed<LiveReceiveOptions>(opts =>
         {
-            InteractiveReceiver.Run(opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Loopback, opts.Password);
+            InteractiveReceiver.Run(opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Password);
         })
         .WithNotParsed(_ => { }); // CommandLineParser already prints help
 }

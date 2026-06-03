@@ -1,5 +1,8 @@
 using System.Text;
-using NAudio.Wave;
+using Ownaudio.Core;
+using OwnaudioNET;
+using OwnaudioNET.Mixing;
+using OwnaudioNET.Sources;
 using Serilog;
 using VoiceTransfer.Data;
 using VoiceTransfer.Logic;
@@ -23,70 +26,80 @@ public static class InteractiveSender
         Log.Information("Type text and press Enter to transmit. Ctrl+C to quit.");
         Log.Information("");
 
-        var format = WaveFormat.CreateIeeeFloatWaveFormat(Constants.SampleRate, Constants.Channels);
-
-        using var waveOut = new WaveOutEvent
+        var config = new AudioConfig
         {
-            DeviceNumber = deviceIndex,
-            DesiredLatency = 200
+            SampleRate = Constants.SampleRate,
+            Channels = Constants.Channels,
+            EnableOutput = true,
+            EnableInput = false
         };
 
-        // Use a BufferedWaveProvider so we can queue audio for each line
-        var provider = new BufferedWaveProvider(format)
-        {
-            BufferLength = Constants.SampleRate * 4 * 120, // 120s buffer
-            ReadFully = true, // return silence when empty so WaveOutEvent stays alive
-            DiscardOnBufferOverflow = true
-        };
+        var outputs = OwnaudioNet.GetOutputDevices();
+        if (deviceIndex < outputs.Count)
+            config.OutputDeviceId = outputs[deviceIndex].DeviceId;
 
-        waveOut.Init(provider);
-        waveOut.Play();
-
-        Console.CancelKeyPress += (_, e) =>
-        {
-            e.Cancel = false;
-            Log.Information("Shutting down sender...");
-        };
+        OwnaudioNet.Initialize(config);
+        OwnaudioNet.Start();
 
         try
         {
-            while (true)
+            var mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
+            mixer.Start();
+
+            Console.CancelKeyPress += (_, e) =>
             {
-                Console.Write("> ");
-                var line = Console.ReadLine();
-                if (line == null) break; // EOF / Ctrl+C
-                if (line.Length == 0) continue;
+                e.Cancel = false;
+                Log.Information("Shutting down sender...");
+            };
 
-                var data = Encoding.UTF8.GetBytes(line);
+            try
+            {
+                while (true)
+                {
+                    Console.Write("> ");
+                    var line = Console.ReadLine();
+                    if (line == null) break; // EOF / Ctrl+C
+                    if (line.Length == 0) continue;
 
-                // Encode -> modulate -> stealth shape
-                var bits = FrameCodec.Encode(data, profile, password);
-                var modulator = new FskModulator(profile);
-                var fskSamples = modulator.ModulateBits(bits);
-                var shaped = StealthShaper.Apply(fskSamples, profile);
+                    var data = Encoding.UTF8.GetBytes(line);
 
-                // Small comfort noise gap between messages (silence would be conspicuous)
-                var noiseLevel = profile.Amplitude * 0.25;
-                var gap = StealthShaper.GenerateComfortNoise(0.15, noiseLevel);
-                var all = FskModulator.Concat(gap, shaped, gap);
+                    // Encode -> modulate -> stealth shape
+                    var bits = FrameCodec.Encode(data, profile, password);
+                    var modulator = new FskModulator(profile);
+                    var fskSamples = modulator.ModulateBits(bits);
+                    var shaped = StealthShaper.Apply(fskSamples, profile);
 
-                // Queue for playback
-                var buffer = new byte[all.Length * 4];
-                Buffer.BlockCopy(all, 0, buffer, 0, buffer.Length);
-                provider.AddSamples(buffer, 0, buffer.Length);
+                    // Small comfort noise gap between messages (silence would be conspicuous)
+                    var noiseLevel = profile.Amplitude * 0.25;
+                    var gap = StealthShaper.GenerateComfortNoise(0.15, noiseLevel);
+                    var all = FskModulator.Concat(gap, shaped, gap);
 
-                var duration = (double)all.Length / Constants.SampleRate;
-                Log.Information("Sent {Len} bytes ({Bits} bits, {Dur:F1}s audio)",
-                    data.Length, bits.Length, duration);
+                    // Play this message
+                    var source = new SampleSource(all, OwnaudioNet.Engine!.Config);
+                    mixer.AddSource(source);
+                    source.Play();
 
-                // Wait for this chunk to finish playing before accepting next line
-                while (provider.BufferedBytes > 0)
-                    Thread.Sleep(50);
+                    var duration = (double)all.Length / Constants.SampleRate;
+                    Log.Information("Sent {Len} bytes ({Bits} bits, {Dur:F1}s audio)",
+                        data.Length, bits.Length, duration);
+
+                    // Wait for playback to finish
+                    while (!source.IsEndOfStream)
+                        Thread.Sleep(50);
+
+                    mixer.RemoveSource(source);
+                    source.Dispose();
+                }
+            }
+            finally
+            {
+                mixer.Stop();
+                mixer.Dispose();
             }
         }
         finally
         {
-            waveOut.Stop();
+            OwnaudioNet.Shutdown();
         }
     }
 }

@@ -1,4 +1,5 @@
-using NAudio.Wave;
+using Ownaudio.Core;
+using OwnaudioNET;
 using Serilog;
 using VoiceTransfer.Data;
 using VoiceTransfer.Logic;
@@ -230,100 +231,72 @@ public static class ReceiverMode
             return Array.Empty<float>();
         }
 
-        using var reader = new AudioFileReader(path);
-        Log.Information("Reading WAV: {Format}, {Duration:F1}s", reader.WaveFormat, reader.TotalTime.TotalSeconds);
-
-        // Read all samples as float
-        var totalSamples = (int)(reader.Length / (reader.WaveFormat.BitsPerSample / 8));
-        var samples = new float[totalSamples];
-        var read = reader.Read(samples, 0, totalSamples);
-
-        // If stereo, take only left channel
-        if (reader.WaveFormat.Channels == 2)
-        {
-            var mono = new float[read / 2];
-            for (var i = 0; i < mono.Length; i++)
-                mono[i] = samples[i * 2];
-            return mono;
-        }
-
-        if (read < totalSamples)
-            Array.Resize(ref samples, read);
+        var samples = WavFile.Read(path, out var sampleRate, out var channels);
+        Log.Information("Reading WAV: {Rate}Hz, {Ch}ch, {Duration:F1}s",
+            sampleRate, channels, (double)samples.Length / sampleRate);
 
         return samples;
     }
 
     private static float[] RecordFromMicrophone(int deviceIndex, int timeoutSeconds)
     {
-        var deviceCount = WaveInEvent.DeviceCount;
+        var inputs = OwnaudioNet.GetInputDevices();
         Log.Information("Available input devices:");
-        for (var i = 0; i < deviceCount; i++)
-        {
-            var caps = WaveInEvent.GetCapabilities(i);
-            Log.Information("  [{Index}] {Name}", i, caps.ProductName);
-        }
+        for (var i = 0; i < inputs.Count; i++)
+            Log.Information("  [{Index}] {Name}", i, inputs[i].Name);
 
-        if (deviceCount == 0)
+        if (inputs.Count == 0)
         {
             Log.Error("No audio input devices found.");
             return Array.Empty<float>();
         }
 
-        if (deviceIndex >= deviceCount)
+        if (deviceIndex >= inputs.Count)
         {
-            Log.Error("Device index {Index} out of range (0-{Max})", deviceIndex, deviceCount - 1);
+            Log.Error("Device index {Index} out of range (0-{Max})", deviceIndex, inputs.Count - 1);
             return Array.Empty<float>();
         }
 
-        var format = new WaveFormat(Constants.SampleRate, Constants.BitsPerSample, Constants.Channels);
-        var allData = new List<byte>();
-
-        using var waveIn = new WaveInEvent
+        var config = new AudioConfig
         {
-            DeviceNumber = deviceIndex,
-            WaveFormat = format,
-            BufferMilliseconds = 100
+            SampleRate = Constants.SampleRate,
+            Channels = Constants.Channels,
+            EnableOutput = false,
+            EnableInput = true,
+            InputDeviceId = inputs[deviceIndex].DeviceId
         };
 
-        waveIn.DataAvailable += (_, e) =>
-        {
-            // Copy buffer data
-            var chunk = new byte[e.BytesRecorded];
-            Array.Copy(e.Buffer, chunk, e.BytesRecorded);
-            lock (allData)
-            {
-                allData.AddRange(chunk);
-            }
-        };
+        OwnaudioNet.Initialize(config);
+        OwnaudioNet.Start();
+
+        var allSamples = new List<float>();
 
         Log.Information("Recording for {Seconds}s... (speak normally, FSK signal will be filtered)", timeoutSeconds);
-        waveIn.StartRecording();
 
-        // Wait for timeout or Ctrl+C
-        var cts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
         try
         {
-            Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), cts.Token).Wait();
+            while (DateTime.UtcNow < deadline)
+            {
+                var buffer = OwnaudioNet.Receive(out var sampleCount);
+                if (buffer != null && sampleCount > 0)
+                {
+                    for (var i = 0; i < sampleCount; i++)
+                        allSamples.Add(buffer[i]);
+                    OwnaudioNet.ReturnInputBuffer(buffer);
+                }
+                else
+                {
+                    Thread.Sleep(5);
+                }
+            }
         }
-        catch (AggregateException) { }
-
-        waveIn.StopRecording();
-
-        // Convert 16-bit PCM to float
-        byte[] rawData;
-        lock (allData)
+        finally
         {
-            rawData = allData.ToArray();
+            OwnaudioNet.Shutdown();
         }
 
-        var sampleCount = rawData.Length / 2;
-        var samples = new float[sampleCount];
-        for (var i = 0; i < sampleCount; i++)
-        {
-            var pcm = BitConverter.ToInt16(rawData, i * 2);
-            samples[i] = pcm / (float)short.MaxValue;
-        }
-
+        var samples = allSamples.ToArray();
         Log.Information("Recorded {Samples} samples ({Duration:F1}s)", samples.Length,
             (double)samples.Length / Constants.SampleRate);
 
