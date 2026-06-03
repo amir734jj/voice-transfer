@@ -183,7 +183,7 @@ public static class FrameCodec
         var lenLo = BitsToOneByte(bits, 8);
         var payloadLen = (lenHi << 8) | lenLo;
 
-        if (payloadLen <= 0 || payloadLen > 65535)
+        if (payloadLen is <= 0 or > 65535)
         {
             return null;
         }
@@ -386,7 +386,11 @@ public static class FrameCodec
     public static bool[] ConcatBits(params bool[][] arrays)
     {
         var total = 0;
-        foreach (var a in arrays) total += a.Length;
+        foreach (var a in arrays)
+        {
+            total += a.Length;
+        }
+
         var result = new bool[total];
         var offset = 0;
         foreach (var a in arrays)

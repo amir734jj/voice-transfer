@@ -1,7 +1,5 @@
 using Ownaudio.Core;
 using OwnaudioNET;
-using OwnaudioNET.Mixing;
-using OwnaudioNET.Sources;
 using VoiceTransfer.Data;
 using VoiceTransfer.Interfaces;
 
@@ -9,7 +7,8 @@ namespace VoiceTransfer.Audio.OwnAudio;
 
 internal sealed class OwnAudioPlayer : IAudioPlayer
 {
-    private readonly AudioMixer _mixer;
+    private readonly int _chunkSize;
+    private readonly int _chunkSleepMs;
 
     public OwnAudioPlayer(int outputDeviceIndex)
     {
@@ -17,7 +16,6 @@ internal sealed class OwnAudioPlayer : IAudioPlayer
         {
             SampleRate = Constants.SampleRate,
             Channels = Constants.Channels,
-            BufferSize = 256,
             EnableOutput = true,
             EnableInput = false
         };
@@ -33,29 +31,30 @@ internal sealed class OwnAudioPlayer : IAudioPlayer
 
         OwnaudioNet.Start();
 
-        _mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);
-        _mixer.Start();
+        _chunkSize = config.BufferSize > 0 ? config.BufferSize : 512;
+        _chunkSleepMs = Math.Max(1, (int)((double)_chunkSize / Constants.SampleRate * 1000 * 0.8));
     }
 
     public void Play(float[] samples)
     {
-        var source = new SampleSource(samples, OwnaudioNet.Engine!.Config);
-        _mixer.AddSource(source);
-        source.Play();
-
-        while (!source.IsEndOfStream)
+        // Send directly to the audio engine, bypassing the mixer layer.
+        // Pace sends to match the hardware consumption rate.
+        var offset = 0;
+        while (offset < samples.Length)
         {
-            Thread.Sleep(5);
+            var count = Math.Min(_chunkSize, samples.Length - offset);
+            OwnaudioNet.Send(samples.AsSpan(offset, count));
+            offset += count;
+            Thread.Sleep(_chunkSleepMs);
         }
 
-        _mixer.RemoveSource(source);
-        source.Dispose();
+        // Wait for the ring buffer to drain
+        var tailMs = (int)((double)_chunkSize * 3 / Constants.SampleRate * 1000);
+        Thread.Sleep(tailMs);
     }
 
     public void Dispose()
     {
-        _mixer.Stop();
-        _mixer.Dispose();
         OwnaudioNet.Shutdown();
     }
 }

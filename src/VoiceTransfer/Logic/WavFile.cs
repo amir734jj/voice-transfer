@@ -35,7 +35,9 @@ public static class WavFile
         bw.Write(dataSize);
 
         foreach (var s in samples)
+        {
             bw.Write(Math.Clamp(s, -1f, 1f));
+        }
     }
 
     public static float[] Read(string path, out int sampleRate, out int channels)

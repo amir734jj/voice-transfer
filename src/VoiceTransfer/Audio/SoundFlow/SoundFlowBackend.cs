@@ -82,6 +82,12 @@ internal sealed class SoundFlowPlayer : IAudioPlayer
     {
         using var done = new ManualResetEventSlim(false);
         var queue = new QueueDataProvider(_format);
+
+        // Queue all samples BEFORE creating the player to avoid a race
+        // where the reader sees an empty queue and fires PlaybackEnded immediately.
+        queue.AddSamples(samples);
+        queue.CompleteAdding();
+
         var player = new SoundPlayer(_engine, _format, queue);
 
         try
@@ -89,8 +95,6 @@ internal sealed class SoundFlowPlayer : IAudioPlayer
             player.PlaybackEnded += (_, _) => done.Set();
             _device.MasterMixer.AddComponent(player);
             player.Play();
-            queue.AddSamples(samples);
-            queue.CompleteAdding();
             done.Wait();
             _device.MasterMixer.RemoveComponent(player);
         }
