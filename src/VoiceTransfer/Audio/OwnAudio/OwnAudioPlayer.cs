@@ -1,11 +1,11 @@
-﻿using Ownaudio.Core;
+using Ownaudio.Core;
 using OwnaudioNET;
 using OwnaudioNET.Mixing;
 using OwnaudioNET.Sources;
 using VoiceTransfer.Data;
 using VoiceTransfer.Interfaces;
 
-namespace VoiceTransfer.Audio;
+namespace VoiceTransfer.Audio.OwnAudio;
 
 internal sealed class OwnAudioPlayer : IAudioPlayer
 {

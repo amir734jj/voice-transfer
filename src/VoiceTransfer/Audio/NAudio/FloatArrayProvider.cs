@@ -1,6 +1,6 @@
-﻿using NAudio.Wave;
+using global::NAudio.Wave;
 
-namespace VoiceTransfer.Audio;
+namespace VoiceTransfer.Audio.NAudio;
 
 /// <summary>
 /// Simple ISampleProvider wrapping a float[] for NAudio playback.

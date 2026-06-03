@@ -1,9 +1,9 @@
-﻿using Ownaudio.Core;
+using Ownaudio.Core;
 using OwnaudioNET;
 using VoiceTransfer.Data;
 using VoiceTransfer.Interfaces;
 
-namespace VoiceTransfer.Audio;
+namespace VoiceTransfer.Audio.OwnAudio;
 
 internal sealed class OwnAudioRecorder : IAudioRecorder
 {

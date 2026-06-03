@@ -1,4 +1,7 @@
 using System.Runtime.InteropServices;
+using VoiceTransfer.Audio.NAudio;
+using VoiceTransfer.Audio.OwnAudio;
+using VoiceTransfer.Audio.SoundFlow;
 using VoiceTransfer.Interfaces;
 
 namespace VoiceTransfer.Audio;

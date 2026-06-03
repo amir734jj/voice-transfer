@@ -1,7 +1,7 @@
 using NAudio.CoreAudioApi;
 using VoiceTransfer.Interfaces;
 
-namespace VoiceTransfer.Audio;
+namespace VoiceTransfer.Audio.NAudio;
 
 public sealed class NAudioBackend : IAudioBackend
 {

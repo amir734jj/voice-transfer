@@ -1,7 +1,7 @@
 using OwnaudioNET;
 using VoiceTransfer.Interfaces;
 
-namespace VoiceTransfer.Audio;
+namespace VoiceTransfer.Audio.OwnAudio;
 
 public sealed class OwnAudioBackend : IAudioBackend
 {

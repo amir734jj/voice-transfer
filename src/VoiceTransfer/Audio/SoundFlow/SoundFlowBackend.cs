@@ -11,7 +11,7 @@ using VoiceTransfer.Data;
 using VoiceTransfer.Interfaces;
 using AudioFormat = SoundFlow.Structs.AudioFormat;
 
-namespace VoiceTransfer.Audio;
+namespace VoiceTransfer.Audio.SoundFlow;
 
 public sealed class SoundFlowBackend : IAudioBackend
 {

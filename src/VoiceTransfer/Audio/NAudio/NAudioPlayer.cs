@@ -1,8 +1,8 @@
-﻿using NAudio.Wave;
+using global::NAudio.Wave;
 using VoiceTransfer.Data;
 using VoiceTransfer.Interfaces;
 
-namespace VoiceTransfer.Audio;
+namespace VoiceTransfer.Audio.NAudio;
 
 internal sealed class NAudioPlayer(int deviceIndex) : IAudioPlayer
 {
