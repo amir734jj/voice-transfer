@@ -30,7 +30,9 @@ public sealed class PortAudioBackend : IAudioBackend
         {
             var info = PortAudioSharp.PortAudio.GetDeviceInfo(i);
             if (info.maxInputChannels > 0)
+            {
                 names.Add(info.name);
+            }
         }
         return names;
     }
@@ -43,7 +45,9 @@ public sealed class PortAudioBackend : IAudioBackend
         {
             var info = PortAudioSharp.PortAudio.GetDeviceInfo(i);
             if (info.maxOutputChannels > 0)
+            {
                 names.Add(info.name);
+            }
         }
         return names;
     }
@@ -80,7 +84,11 @@ public sealed class PortAudioBackend : IAudioBackend
             var info = PortAudioSharp.PortAudio.GetDeviceInfo(i);
             if (info.maxOutputChannels > 0)
             {
-                if (outputIndex == index) return i;
+                if (outputIndex == index)
+                {
+                    return i;
+                }
+
                 outputIndex++;
             }
         }
@@ -95,7 +103,11 @@ public sealed class PortAudioBackend : IAudioBackend
             var info = PortAudioSharp.PortAudio.GetDeviceInfo(i);
             if (info.maxInputChannels > 0)
             {
-                if (inputIndex == index) return i;
+                if (inputIndex == index)
+                {
+                    return i;
+                }
+
                 inputIndex++;
             }
         }

@@ -38,21 +38,17 @@ public static class AudioBackendFactory
 
     private static IAudioBackend CreateAuto(bool loopback)
     {
-        if (loopback)
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                Log.Error("Loopback capture requires Windows (WASAPI). On Linux/macOS, use a virtual audio cable instead");
-                Environment.Exit(1);
-            }
-
             return new NAudioBackend();
         }
 
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return new NAudioBackend();
+        if (loopback)
+        {
+            Log.Error("Loopback capture requires Windows (WASAPI). On Linux/macOS, use a virtual audio cable instead");
+            Environment.Exit(1);
+        }
 
-        // PortAudio has better cross-platform support on Linux/macOS
         return new PortAudioBackend();
     }
 
