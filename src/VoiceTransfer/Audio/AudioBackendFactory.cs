@@ -6,17 +6,25 @@ using VoiceTransfer.Interfaces;
 
 namespace VoiceTransfer.Audio;
 
+public enum AudioEngineType
+{
+    Auto,
+    OwnAudio,
+    NAudio,
+    SoundFlow
+}
+
 public static class AudioBackendFactory
 {
-    public static IAudioBackend Create(string engine = "auto", bool loopback = false)
+    public static IAudioBackend Create(AudioEngineType engine = AudioEngineType.Auto, bool loopback = false)
     {
-        return engine.ToLowerInvariant() switch
+        return engine switch
         {
-            "naudio" => RequireWindows(new NAudioBackend()),
-            "ownaudio" => new OwnAudioBackend(),
-            "soundflow" => new SoundFlowBackend(),
-            "auto" => CreateAuto(loopback),
-            _ => throw new ArgumentException($"Unknown audio engine '{engine}'. Valid: auto, ownaudio, naudio, soundflow")
+            AudioEngineType.NAudio => RequireWindows(new NAudioBackend()),
+            AudioEngineType.OwnAudio => new OwnAudioBackend(),
+            AudioEngineType.SoundFlow => new SoundFlowBackend(),
+            AudioEngineType.Auto => CreateAuto(loopback),
+            _ => throw new ArgumentOutOfRangeException(nameof(engine), engine, "Unknown audio engine")
         };
     }
 

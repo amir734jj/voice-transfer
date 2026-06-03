@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using global::NAudio.Wave;
 using VoiceTransfer.Data;
 using VoiceTransfer.Interfaces;
@@ -8,9 +7,7 @@ namespace VoiceTransfer.Audio.NAudio;
 internal sealed class NAudioLoopbackRecorder : IAudioRecorder
 {
     private readonly WasapiLoopbackCapture _capture;
-    private readonly ConcurrentQueue<float[]> _chunks = new();
-    private float[] _current = [];
-    private int _pos;
+    private readonly ChunkedAudioBuffer _buffer = new();
     private readonly int _sourceRate;
     private readonly int _sourceChannels;
 
@@ -40,29 +37,12 @@ internal sealed class NAudioLoopbackRecorder : IAudioRecorder
                 floats = Resample(floats, _sourceRate, Constants.SampleRate);
             }
 
-            _chunks.Enqueue(floats);
+            _buffer.Enqueue(floats);
         };
         _capture.StartRecording();
     }
 
-    public int Read(Span<float> buffer)
-    {
-        if (_pos >= _current.Length)
-        {
-            if (!_chunks.TryDequeue(out var next))
-            {
-                return 0;
-            }
-
-            _current = next;
-            _pos = 0;
-        }
-
-        var count = Math.Min(buffer.Length, _current.Length - _pos);
-        _current.AsSpan(_pos, count).CopyTo(buffer);
-        _pos += count;
-        return count;
-    }
+    public int Read(Span<float> buffer) => _buffer.Read(buffer);
 
     public void Dispose()
     {

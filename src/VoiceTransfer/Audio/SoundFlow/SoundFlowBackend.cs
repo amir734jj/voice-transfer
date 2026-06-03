@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using SoundFlow.Abstracts;
 using SoundFlow.Abstracts.Devices;
@@ -101,9 +100,7 @@ internal sealed class SoundFlowRecorder : IAudioRecorder
 {
     private readonly MiniAudioEngine _engine;
     private readonly AudioCaptureDevice _device;
-    private readonly ConcurrentQueue<float[]> _chunks = new();
-    private float[] _current = [];
-    private int _pos;
+    private readonly ChunkedAudioBuffer _buffer = new();
 
     public SoundFlowRecorder(int inputDeviceIndex)
     {
@@ -122,24 +119,10 @@ internal sealed class SoundFlowRecorder : IAudioRecorder
 
     private void OnAudio(Span<float> samples, Capability _)
     {
-        _chunks.Enqueue(samples.ToArray());
+        _buffer.Enqueue(samples.ToArray());
     }
 
-    public int Read(Span<float> buffer)
-    {
-        if (_pos >= _current.Length)
-        {
-            if (!_chunks.TryDequeue(out var next))
-                return 0;
-            _current = next;
-            _pos = 0;
-        }
-
-        var count = Math.Min(buffer.Length, _current.Length - _pos);
-        _current.AsSpan(_pos, count).CopyTo(buffer);
-        _pos += count;
-        return count;
-    }
+    public int Read(Span<float> buffer) => _buffer.Read(buffer);
 
     public void Dispose()
     {
@@ -154,9 +137,7 @@ internal sealed class SoundFlowLoopbackRecorder : IAudioRecorder
 {
     private readonly MiniAudioEngine _engine;
     private readonly AudioCaptureDevice _device;
-    private readonly ConcurrentQueue<float[]> _chunks = new();
-    private float[] _current = [];
-    private int _pos;
+    private readonly ChunkedAudioBuffer _buffer = new();
 
     public SoundFlowLoopbackRecorder()
     {
@@ -170,24 +151,10 @@ internal sealed class SoundFlowLoopbackRecorder : IAudioRecorder
 
     private void OnAudio(Span<float> samples, Capability _)
     {
-        _chunks.Enqueue(samples.ToArray());
+        _buffer.Enqueue(samples.ToArray());
     }
 
-    public int Read(Span<float> buffer)
-    {
-        if (_pos >= _current.Length)
-        {
-            if (!_chunks.TryDequeue(out var next))
-                return 0;
-            _current = next;
-            _pos = 0;
-        }
-
-        var count = Math.Min(buffer.Length, _current.Length - _pos);
-        _current.AsSpan(_pos, count).CopyTo(buffer);
-        _pos += count;
-        return count;
-    }
+    public int Read(Span<float> buffer) => _buffer.Read(buffer);
 
     public void Dispose()
     {
@@ -203,9 +170,7 @@ internal sealed class SoundFlowDuplex : IAudioDuplex
     private readonly MiniAudioEngine _engine;
     private readonly FullDuplexDevice _device;
     private readonly AudioFormat _format;
-    private readonly ConcurrentQueue<float[]> _chunks = new();
-    private float[] _current = [];
-    private int _pos;
+    private readonly ChunkedAudioBuffer _buffer = new();
     private readonly QueueDataProvider _playQueue;
     private readonly SoundPlayer _player;
 
@@ -236,24 +201,10 @@ internal sealed class SoundFlowDuplex : IAudioDuplex
 
     private void OnAudio(Span<float> samples, Capability _)
     {
-        _chunks.Enqueue(samples.ToArray());
+        _buffer.Enqueue(samples.ToArray());
     }
 
-    public int Read(Span<float> buffer)
-    {
-        if (_pos >= _current.Length)
-        {
-            if (!_chunks.TryDequeue(out var next))
-                return 0;
-            _current = next;
-            _pos = 0;
-        }
-
-        var count = Math.Min(buffer.Length, _current.Length - _pos);
-        _current.AsSpan(_pos, count).CopyTo(buffer);
-        _pos += count;
-        return count;
-    }
+    public int Read(Span<float> buffer) => _buffer.Read(buffer);
 
     public void Write(ReadOnlySpan<float> buffer)
     {

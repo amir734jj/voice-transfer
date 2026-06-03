@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using global::NAudio.Wave;
 using VoiceTransfer.Data;
 using VoiceTransfer.Interfaces;
@@ -10,9 +9,7 @@ internal sealed class NAudioDuplex : IAudioDuplex
     private readonly WaveInEvent _waveIn;
     private readonly WaveOutEvent _waveOut;
     private readonly BufferedWaveProvider _playBuffer;
-    private readonly ConcurrentQueue<float[]> _captureChunks = new();
-    private float[] _current = [];
-    private int _pos;
+    private readonly ChunkedAudioBuffer _buffer = new();
 
     public NAudioDuplex(int inputDeviceIndex, int outputDeviceIndex)
     {
@@ -28,7 +25,7 @@ internal sealed class NAudioDuplex : IAudioDuplex
         {
             var floats = new float[e.BytesRecorded / 4];
             Buffer.BlockCopy(e.Buffer, 0, floats, 0, e.BytesRecorded);
-            _captureChunks.Enqueue(floats);
+            _buffer.Enqueue(floats);
         };
 
         _playBuffer = new BufferedWaveProvider(format) { DiscardOnBufferOverflow = true };
@@ -39,24 +36,7 @@ internal sealed class NAudioDuplex : IAudioDuplex
         _waveOut.Play();
     }
 
-    public int Read(Span<float> buffer)
-    {
-        if (_pos >= _current.Length)
-        {
-            if (!_captureChunks.TryDequeue(out var next))
-            {
-                return 0;
-            }
-
-            _current = next;
-            _pos = 0;
-        }
-
-        var count = Math.Min(buffer.Length, _current.Length - _pos);
-        _current.AsSpan(_pos, count).CopyTo(buffer);
-        _pos += count;
-        return count;
-    }
+    public int Read(Span<float> buffer) => _buffer.Read(buffer);
 
     public void Write(ReadOnlySpan<float> buffer)
     {
