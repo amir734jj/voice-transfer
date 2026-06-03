@@ -91,7 +91,7 @@ async Task CheckForUpdates()
         await mgr.DownloadUpdatesAsync(newVersion);
 
         Log.Information("Update downloaded, restarting");
-        mgr.ApplyUpdatesAndRestart(newVersion.TargetFullRelease);
+        mgr.ApplyUpdatesAndRestart(newVersion.TargetFullRelease, args);
     }
     catch (Exception ex)
     {
