@@ -114,7 +114,7 @@ public static class InteractiveSender
                     if (cursorPos > 0)
                     {
                         cursorPos--;
-                        Console.SetCursorPosition(Console.CursorLeft - 1, Console.CursorTop);
+                        SafeSetCursor(Console.CursorLeft - 1);
                     }
                     break;
 
@@ -122,17 +122,17 @@ public static class InteractiveSender
                     if (cursorPos < buffer.Length)
                     {
                         cursorPos++;
-                        Console.SetCursorPosition(Console.CursorLeft + 1, Console.CursorTop);
+                        SafeSetCursor(Console.CursorLeft + 1);
                     }
                     break;
 
                 case ConsoleKey.Home:
-                    Console.SetCursorPosition(Console.CursorLeft - cursorPos, Console.CursorTop);
+                    SafeSetCursor(Math.Max(0, Console.CursorLeft - cursorPos));
                     cursorPos = 0;
                     break;
 
                 case ConsoleKey.End:
-                    Console.SetCursorPosition(Console.CursorLeft + (buffer.Length - cursorPos), Console.CursorTop);
+                    SafeSetCursor(Console.CursorLeft + (buffer.Length - cursorPos));
                     cursorPos = buffer.Length;
                     break;
 
@@ -176,11 +176,10 @@ public static class InteractiveSender
 
     private static void ReplaceBuffer(StringBuilder buffer, ref int cursorPos, string newText)
     {
-        // Move to start of input, clear, write new text
-        var promptCol = Console.CursorLeft - cursorPos;
-        Console.SetCursorPosition(promptCol, Console.CursorTop);
+        var promptCol = Math.Max(0, Console.CursorLeft - cursorPos);
+        SafeSetCursor(promptCol);
         Console.Write(new string(' ', buffer.Length));
-        Console.SetCursorPosition(promptCol, Console.CursorTop);
+        SafeSetCursor(promptCol);
         Console.Write(newText);
 
         buffer.Clear();
@@ -190,11 +189,23 @@ public static class InteractiveSender
 
     private static void RedrawFromCursor(StringBuilder buffer, int cursorPos)
     {
-        // Calculate the start position of the entire input (after "> ")
-        var startCol = Console.CursorLeft - cursorPos;
-        Console.SetCursorPosition(startCol, Console.CursorTop);
+        var startCol = Math.Max(0, Console.CursorLeft - cursorPos);
+        SafeSetCursor(startCol);
         Console.Write(buffer);
         Console.Write(' '); // clear trailing char
-        Console.SetCursorPosition(startCol + cursorPos, Console.CursorTop);
+        SafeSetCursor(startCol + cursorPos);
+    }
+
+    private static void SafeSetCursor(int col)
+    {
+        try
+        {
+            var maxCol = Console.BufferWidth > 0 ? Console.BufferWidth - 1 : 0;
+            Console.SetCursorPosition(Math.Clamp(col, 0, maxCol), Console.CursorTop);
+        }
+        catch (IOException)
+        {
+            // Console may not support cursor positioning (e.g. redirected output)
+        }
     }
 }
