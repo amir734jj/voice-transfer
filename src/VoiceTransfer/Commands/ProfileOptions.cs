@@ -40,7 +40,7 @@ internal abstract class ProfileOptions
     [Option("password", HelpText = "Encryption password (AES-256-GCM). Must match on sender & receiver. Omit for no encryption.")]
     public string? Password { get; set; }
 
-    [Option("audio-engine", Default = AudioEngineType.Auto, HelpText = "Audio engine: auto (portaudio on Linux/macOS, ownaudio on Windows, naudio for loopback), ownaudio, naudio (Windows only), soundflow, portaudio")]
+    [Option("audio-engine", Default = AudioEngineType.Auto, HelpText = "Audio engine: auto (naudio on Windows, portaudio on Linux/macOS), ownaudio, naudio (Windows only), soundflow, portaudio")]
     public AudioEngineType AudioEngine { get; set; } = AudioEngineType.Auto;
 
     public TransmissionProfile BuildProfile() =>

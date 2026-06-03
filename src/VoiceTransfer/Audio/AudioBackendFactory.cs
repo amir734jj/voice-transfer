@@ -50,7 +50,7 @@ public static class AudioBackendFactory
         }
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return new OwnAudioBackend();
+            return new NAudioBackend();
 
         // PortAudio has better cross-platform support on Linux/macOS
         return new PortAudioBackend();
