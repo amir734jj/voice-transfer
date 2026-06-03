@@ -14,7 +14,7 @@ public static class TestMode
     {
         ListDevices(audio);
         TestSpeaker(audio, outputDeviceIndex, durationSeconds);
-        TestMicrophone(audio, inputDeviceIndex, durationSeconds);
+        TestMicrophone(audio, inputDeviceIndex, outputDeviceIndex, durationSeconds);
 
         Log.Information("");
         Log.Information("Audio test complete");
@@ -76,15 +76,16 @@ public static class TestMode
         Log.Information("");
     }
 
-    private static void TestMicrophone(IAudioBackend audio, int deviceIndex, double durationSeconds)
+    private static void TestMicrophone(IAudioBackend audio, int deviceIndex, int outputDeviceIndex, double durationSeconds)
     {
         Log.Information("=== Microphone Test (device {Index}) ===", deviceIndex);
-        Log.Information("Recording {Duration:F1}s from microphone", durationSeconds);
+        Log.Information("Speak into the microphone now! Recording {Duration:F1}s", durationSeconds);
 
         using var recorder = audio.CreateRecorder(deviceIndex);
 
         var totalSamples = (int)(Constants.SampleRate * durationSeconds);
         var buffer = new float[4096];
+        var recorded = new List<float>();
         var samplesRead = 0;
         var peakLevel = 0f;
         var sumSquares = 0.0;
@@ -100,6 +101,7 @@ public static class TestMode
 
             for (var i = 0; i < count; i++)
             {
+                recorded.Add(buffer[i]);
                 var abs = Math.Abs(buffer[i]);
                 if (abs > peakLevel)
                 {
@@ -111,6 +113,8 @@ public static class TestMode
 
             samplesRead += count;
         }
+
+        recorder.Dispose();
 
         var rmsLevel = Math.Sqrt(sumSquares / Math.Max(1, samplesRead));
         var peakDb = peakLevel > 0 ? 20 * Math.Log10(peakLevel) : -100;
@@ -131,6 +135,15 @@ public static class TestMode
         else
         {
             Log.Information("Microphone is working");
+        }
+
+        // Play back the recording so the user can hear what was captured
+        if (recorded.Count > 0 && peakLevel >= 0.001f)
+        {
+            Log.Information("Playing back your recording");
+            using var player = audio.CreatePlayer(outputDeviceIndex);
+            player.Play(recorded.ToArray());
+            Log.Information("Playback done. Did you hear yourself?");
         }
 
         Log.Information("");
