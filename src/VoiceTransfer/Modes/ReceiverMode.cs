@@ -26,14 +26,17 @@ public static class ReceiverMode
         if (inputWav != null)
         {
             samples = ReadWav(inputWav);
-            if (samples.Length == 0) return;
+            if (samples.Length == 0)
+            {
+                return;
+            }
         }
         else
         {
             samples = RecordFromMicrophone(deviceIndex, timeoutSeconds);
             if (samples.Length == 0)
             {
-                Log.Error("No audio captured.");
+                Log.Error("No audio captured");
                 return;
             }
         }
@@ -73,7 +76,7 @@ public static class ReceiverMode
         var signalStart = FindSignalStart(samples, profile);
         if (signalStart < 0)
         {
-            Log.Debug("No FSK signal detected in audio.");
+            Log.Debug("No FSK signal detected in audio");
             return null;
         }
 
@@ -92,7 +95,10 @@ public static class ReceiverMode
         for (var nudge = -profile.SamplesPerBit / 2; nudge <= profile.SamplesPerBit / 2; nudge += profile.SamplesPerBit / 8)
         {
             var tryStart = alignedStart + nudge;
-            if (tryStart < 0) continue;
+            if (tryStart < 0)
+            {
+                continue;
+            }
 
             var result = TryDemodulate(samples, tryStart, demod, profile.FecRepeat, password);
             if (result != null)
@@ -125,7 +131,10 @@ public static class ReceiverMode
 
         // Count valid bits to check if there's enough signal
         var validCount = valid.Count(v => v);
-        if (validCount < 20) return null; // too few valid bits for a frame
+        if (validCount < 20)
+        {
+            return null; // too few valid bits for a frame
+        }
 
         // Find longest run allowing small gaps of invalid bits.
         // FEC handles any bit errors from low-confidence blocks, but comfort noise
@@ -140,7 +149,11 @@ public static class ReceiverMode
         {
             if (valid[i])
             {
-                if (runStart < 0) runStart = i;
+                if (runStart < 0)
+                {
+                    runStart = i;
+                }
+
                 currentGap = 0;
 
                 var runEnd = i;
@@ -165,7 +178,10 @@ public static class ReceiverMode
         }
 
         var bestRunLen = bestRunEnd - bestRunStart + 1;
-        if (bestRunLen < 20) return null;
+        if (bestRunLen < 20)
+        {
+            return null;
+        }
 
         // Extract the run (including any gap bits -- they have best-guess values)
         var runBits = new bool[bestRunLen];
@@ -210,14 +226,19 @@ public static class ReceiverMode
 
                 var bit = markPower > spacePower;
                 if (prevBit.HasValue && bit != prevBit.Value)
+                {
                     alternations++;
+                }
+
                 prevBit = bit;
             }
 
             // Preamble has perfect alternation (7 out of 7 transitions for 8 bits)
             // Allow 1 miss for noise robustness
             if (valid && alternations >= windowSize - 2)
+            {
                 return i * blockSize;
+            }
         }
 
         return -1;
@@ -247,7 +268,7 @@ public static class ReceiverMode
 
         if (inputs.Count == 0)
         {
-            Log.Error("No audio input devices found.");
+            Log.Error("No audio input devices found");
             return Array.Empty<float>();
         }
 

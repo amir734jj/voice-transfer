@@ -139,40 +139,60 @@ public class TransmissionProfile
     public void Validate()
     {
         if (BaudRate < 50 || BaudRate > 2400)
+        {
             throw new ArgumentException($"BaudRate must be 50-2400, got {BaudRate}.");
+        }
 
         // Goertzel frequency resolution = SampleRate / SamplesPerBit
         // Must be narrower than the frequency separation (400 Hz) to distinguish mark from space
         var freqSep = Math.Abs(FreqMark - FreqSpace);
         var binWidth = (double)Constants.SampleRate / SamplesPerBit;
         if (binWidth > freqSep - 50)
+        {
             Log.Warning("Baud rate {Baud} gives Goertzel bin width {Bin:F0} Hz, " +
-                "which is close to the {Sep:F0} Hz mark/space separation. Noise resilience will be poor.",
+                        "which is close to the {Sep:F0} Hz mark/space separation. Noise resilience will be poor.",
                 BaudRate, binWidth, freqSep);
+        }
 
         if (Amplitude <= 0 || Amplitude > 1.0)
+        {
             throw new ArgumentException($"Amplitude must be in (0, 1.0], got {Amplitude}.");
+        }
 
         if (PreambleBits < 16)
+        {
             throw new ArgumentException($"PreambleBits must be >= 16, got {PreambleBits}.");
+        }
 
         if (SignalThreshold <= 0)
+        {
             throw new ArgumentException($"SignalThreshold must be > 0, got {SignalThreshold}.");
+        }
 
         if (DecisionRatio < 1.0)
+        {
             throw new ArgumentException($"DecisionRatio must be >= 1.0, got {DecisionRatio}.");
+        }
 
         if (FecRepeat < 1 || FecRepeat > 9 || FecRepeat % 2 == 0)
+        {
             throw new ArgumentException($"FecRepeat must be an odd number 1-9, got {FecRepeat}.");
+        }
 
         if (FreqMark < 300 || FreqMark > 3400)
+        {
             throw new ArgumentException($"FreqMark must be 300-3400 Hz (telephone passband), got {FreqMark}.");
+        }
 
         if (FreqSpace < 300 || FreqSpace > 3400)
+        {
             throw new ArgumentException($"FreqSpace must be 300-3400 Hz (telephone passband), got {FreqSpace}.");
+        }
 
         if (Math.Abs(FreqMark - FreqSpace) < 200)
+        {
             throw new ArgumentException($"FreqMark and FreqSpace must differ by >= 200 Hz, got {Math.Abs(FreqMark - FreqSpace):F0} Hz.");
+        }
     }
 
     public void LogSettings()

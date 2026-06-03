@@ -29,9 +29,13 @@ public class FskModulator(TransmissionProfile profile)
             if (fadeLen > 0)
             {
                 if (i < fadeLen)
+                {
                     envelope = (double)i / fadeLen;
+                }
                 else if (i >= samplesPerBit - fadeLen)
+                {
                     envelope = (double)(samplesPerBit - 1 - i) / fadeLen;
+                }
             }
 
             buffer[offset + i] = (float)(profile.Amplitude * envelope * Math.Sin(_phase));

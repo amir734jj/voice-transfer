@@ -51,7 +51,9 @@ public class FskDemodulator(TransmissionProfile profile)
     public (bool bit, bool valid) DemodulateBlock(float[] samples, int offset, int length)
     {
         if (offset + length > samples.Length)
+        {
             return (false, false);
+        }
 
         var markPower = GoertzelPower(samples, offset, length, profile.FreqMark);
         var spacePower = GoertzelPower(samples, offset, length, profile.FreqSpace);
@@ -61,13 +63,17 @@ public class FskDemodulator(TransmissionProfile profile)
 
         // Check if signal is strong enough (distinguishes signal from silence)
         if (maxPower < profile.SignalThreshold)
+        {
             return (false, false);
+        }
 
         var bestGuess = markPower > spacePower;
 
         // Check if decision is clear enough (one frequency dominates)
         if (minPower > 0 && maxPower / minPower < profile.DecisionRatio)
+        {
             return (bestGuess, false); // best guess bit, but low confidence
+        }
 
         return (bestGuess, true);
     }
@@ -111,11 +117,16 @@ public class FskDemodulator(TransmissionProfile profile)
         {
             var offset = searchStart + tryOffset;
             if (offset + searchLength > samples.Length)
+            {
                 break;
+            }
 
             // Demodulate a stretch of bits and check for alternating pattern
             var numTestBits = Math.Min(32, (searchLength - tryOffset) / blockSize);
-            if (numTestBits < 8) continue;
+            if (numTestBits < 8)
+            {
+                continue;
+            }
 
             double score = 0;
             bool? prevBit = null;
@@ -127,7 +138,9 @@ public class FskDemodulator(TransmissionProfile profile)
                 {
                     score += 1.0; // reward valid signal
                     if (prevBit.HasValue && bit != prevBit.Value)
+                    {
                         score += 2.0; // reward alternation (preamble pattern)
+                    }
                 }
                 prevBit = bit;
             }

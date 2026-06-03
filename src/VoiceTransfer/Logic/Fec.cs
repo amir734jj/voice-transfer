@@ -22,7 +22,9 @@ public static class Fec
     public static bool[] Encode(bool[] bits, int repeatFactor)
     {
         if (repeatFactor <= 1)
+        {
             return bits;
+        }
 
         var encoded = new bool[bits.Length * repeatFactor];
         for (var i = 0; i < bits.Length; i++)
@@ -42,7 +44,9 @@ public static class Fec
     public static bool[] Decode(bool[] bits, int repeatFactor)
     {
         if (repeatFactor <= 1)
+        {
             return bits;
+        }
 
         var dataLen = bits.Length / repeatFactor;
         var decoded = new bool[dataLen];
@@ -53,7 +57,9 @@ public static class Fec
             for (var r = 0; r < repeatFactor; r++)
             {
                 if (bits[i * repeatFactor + r])
+                {
                     onesCount++;
+                }
             }
             // Majority vote: if more than half are 1, result is 1
             decoded[i] = onesCount > repeatFactor / 2;
@@ -73,7 +79,9 @@ public static class Fec
     public static bool[] Interleave(bool[] bits, int repeatFactor)
     {
         if (repeatFactor <= 1)
+        {
             return bits;
+        }
 
         var blockSize = repeatFactor;
         var numBlocks = bits.Length / blockSize;
@@ -104,7 +112,9 @@ public static class Fec
     public static bool[] Deinterleave(bool[] bits, int repeatFactor)
     {
         if (repeatFactor <= 1)
+        {
             return bits;
+        }
 
         var blockSize = repeatFactor;
         var numBlocks = bits.Length / blockSize;

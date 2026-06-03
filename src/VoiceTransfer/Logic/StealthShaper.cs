@@ -46,9 +46,21 @@ public static class StealthShaper
         {
             // 1. Generate pink noise (1/f spectrum -- sounds like phone static)
             pinkCounter++;
-            if ((pinkCounter & 1) == 0) pinkState[0] = (rng.NextDouble() * 2 - 1);
-            if ((pinkCounter & 3) == 0) pinkState[1] = (rng.NextDouble() * 2 - 1);
-            if ((pinkCounter & 7) == 0) pinkState[2] = (rng.NextDouble() * 2 - 1);
+            if ((pinkCounter & 1) == 0)
+            {
+                pinkState[0] = (rng.NextDouble() * 2 - 1);
+            }
+
+            if ((pinkCounter & 3) == 0)
+            {
+                pinkState[1] = (rng.NextDouble() * 2 - 1);
+            }
+
+            if ((pinkCounter & 7) == 0)
+            {
+                pinkState[2] = (rng.NextDouble() * 2 - 1);
+            }
+
             var pink = (pinkState[0] + pinkState[1] + pinkState[2]) / 3.0;
 
             // 2. Amplitude wobble
@@ -61,9 +73,13 @@ public static class StealthShaper
             // 4. Global fade in/out envelope
             var envelope = 1.0;
             if (i < fadeLen)
+            {
                 envelope = (double)i / fadeLen;
+            }
             else if (i >= fskSamples.Length - fadeLen)
+            {
                 envelope = (double)(fskSamples.Length - 1 - i) / fadeLen;
+            }
 
             result[i] = (float)(shaped * envelope);
         }
@@ -87,9 +103,21 @@ public static class StealthShaper
         for (var i = 0; i < count; i++)
         {
             counter++;
-            if ((counter & 1) == 0) pinkState[0] = (rng.NextDouble() * 2 - 1);
-            if ((counter & 3) == 0) pinkState[1] = (rng.NextDouble() * 2 - 1);
-            if ((counter & 7) == 0) pinkState[2] = (rng.NextDouble() * 2 - 1);
+            if ((counter & 1) == 0)
+            {
+                pinkState[0] = (rng.NextDouble() * 2 - 1);
+            }
+
+            if ((counter & 3) == 0)
+            {
+                pinkState[1] = (rng.NextDouble() * 2 - 1);
+            }
+
+            if ((counter & 7) == 0)
+            {
+                pinkState[2] = (rng.NextDouble() * 2 - 1);
+            }
+
             var pink = (pinkState[0] + pinkState[1] + pinkState[2]) / 3.0;
 
             // Fade in/out at edges
@@ -97,8 +125,14 @@ public static class StealthShaper
             var fadeLen = Math.Min(count / 4, (int)(0.1 * Constants.SampleRate));
             if (fadeLen > 0)
             {
-                if (i < fadeLen) env = (double)i / fadeLen;
-                else if (i >= count - fadeLen) env = (double)(count - 1 - i) / fadeLen;
+                if (i < fadeLen)
+                {
+                    env = (double)i / fadeLen;
+                }
+                else if (i >= count - fadeLen)
+                {
+                    env = (double)(count - 1 - i) / fadeLen;
+                }
             }
 
             samples[i] = (float)(pink * level * env);

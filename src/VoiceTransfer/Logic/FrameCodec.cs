@@ -47,7 +47,9 @@ public static class FrameCodec
         // 3. Build data bytes: [lenHi][lenLo][payload...][crcHi][crcLo]
         var payloadLen = encrypted.Length;
         if (payloadLen > 65535)
+        {
             throw new InvalidOperationException($"Payload too large: {payloadLen} bytes (max 65535)");
+        }
 
         var lenHi = (byte)(payloadLen >> 8);
         var lenLo = (byte)(payloadLen & 0xFF);
@@ -101,12 +103,16 @@ public static class FrameCodec
         {
             var syncPos = FindPattern(bits, syncPattern, searchFrom);
             if (syncPos < 0)
+            {
                 break;
+            }
 
             // Data starts after the 8-bit sync byte
             var dataStart = syncPos + 8;
             if (dataStart >= bits.Length)
+            {
                 break;
+            }
 
             // Extract remaining bits (FEC-encoded data)
             // The run may include trailing noise bits beyond the actual FEC data.
@@ -121,7 +127,9 @@ public static class FrameCodec
                 Array.Copy(bits, dataStart, fecBits, 0, remainLen);
                 var result = TryDecodeData(fecBits, password);
                 if (result != null)
+                {
                     return result;
+                }
             }
             else
             {
@@ -130,8 +138,15 @@ public static class FrameCodec
                 for (var trim = 0; trim < maxTrim; trim++)
                 {
                     var tryLen = remainLen - trim;
-                    if (tryLen < fecRepeat * 4) break; // need at least len(2) + crc(2) = 32 bits after FEC
-                    if (tryLen % fecRepeat != 0) continue; // must be divisible by repeat factor
+                    if (tryLen < fecRepeat * 4)
+                    {
+                        break; // need at least len(2) + crc(2) = 32 bits after FEC
+                    }
+
+                    if (tryLen % fecRepeat != 0)
+                    {
+                        continue; // must be divisible by repeat factor
+                    }
 
                     var fecBits = new bool[tryLen];
                     Array.Copy(bits, dataStart, fecBits, 0, tryLen);
@@ -141,7 +156,9 @@ public static class FrameCodec
 
                     var result = TryDecodeData(corrected, password);
                     if (result != null)
+                    {
                         return result;
+                    }
                 }
             }
 
@@ -158,18 +175,24 @@ public static class FrameCodec
     private static byte[]? TryDecodeData(bool[] bits, string? password)
     {
         if (bits.Length < 32) // need at least len(16) + crc(16)
+        {
             return null;
+        }
 
         var lenHi = BitsToOneByte(bits, 0);
         var lenLo = BitsToOneByte(bits, 8);
         var payloadLen = (lenHi << 8) | lenLo;
 
         if (payloadLen <= 0 || payloadLen > 65535)
+        {
             return null;
+        }
 
         var needed = 16 + payloadLen * 8 + 16; // len + payload + crc in bits
         if (needed > bits.Length)
+        {
             return null;
+        }
 
         var pos = 16; // skip length
         var encrypted = new byte[payloadLen];
@@ -190,7 +213,9 @@ public static class FrameCodec
         var computedCrc = Crc16Ccitt(crcData);
 
         if (receivedCrc != computedCrc)
+        {
             return null;
+        }
 
         byte[] b64Bytes;
         try
@@ -244,7 +269,9 @@ public static class FrameCodec
     public static byte[] Decrypt(byte[] data, string password)
     {
         if (data.Length < AesNonceSize + AesTagSize)
+        {
             throw new CryptographicException("Data too short for AES-GCM.");
+        }
 
         var key = DeriveKey(password);
 
@@ -302,9 +329,13 @@ public static class FrameCodec
             for (var i = 0; i < 8; i++)
             {
                 if ((crc & 0x8000) != 0)
+                {
                     crc = (ushort)((crc << 1) ^ 0x1021);
+                }
                 else
+                {
                     crc <<= 1;
+                }
             }
         }
         return crc;
@@ -345,7 +376,9 @@ public static class FrameCodec
         for (var i = 0; i < 8; i++)
         {
             if (bits[offset + i])
+            {
                 b |= (byte)(1 << (7 - i));
+            }
         }
         return b;
     }
@@ -380,7 +413,10 @@ public static class FrameCodec
                     break;
                 }
             }
-            if (match) return i;
+            if (match)
+            {
+                return i;
+            }
         }
         return -1;
     }

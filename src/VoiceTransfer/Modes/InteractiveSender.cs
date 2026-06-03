@@ -23,7 +23,7 @@ public static class InteractiveSender
         var effectiveBaud = (double)profile.BaudRate / profile.FecRepeat;
         var bytesPerSec = effectiveBaud / 8 / 1.37;
         Log.Information("Interactive sender ready (~{Rate:F1} bytes/sec effective)", bytesPerSec);
-        Log.Information("Type text and press Enter to transmit. Ctrl+C to quit.");
+        Log.Information("Type text and press Enter to transmit. Ctrl+C to quit");
         Log.Information("");
 
         var config = new AudioConfig
@@ -36,7 +36,9 @@ public static class InteractiveSender
 
         var outputs = OwnaudioNet.GetOutputDevices();
         if (deviceIndex < outputs.Count)
+        {
             config.OutputDeviceId = outputs[deviceIndex].DeviceId;
+        }
 
         OwnaudioNet.Initialize(config);
         OwnaudioNet.Start();
@@ -58,8 +60,15 @@ public static class InteractiveSender
                 {
                     Console.Write("> ");
                     var line = Console.ReadLine();
-                    if (line == null) break; // EOF / Ctrl+C
-                    if (line.Length == 0) continue;
+                    if (line == null)
+                    {
+                        break; // EOF / Ctrl+C
+                    }
+
+                    if (line.Length == 0)
+                    {
+                        continue;
+                    }
 
                     var data = Encoding.UTF8.GetBytes(line);
 

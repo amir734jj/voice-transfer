@@ -21,7 +21,7 @@ public static class InteractiveReceiver
         profile.LogSettings();
 
         Log.Information("Interactive receiver listening...");
-        Log.Information("Ctrl+C to quit.");
+        Log.Information("Ctrl+C to quit");
         Log.Information("");
 
         // Ring buffer for FSK processing
@@ -41,11 +41,15 @@ public static class InteractiveReceiver
 
         var inputs = OwnaudioNet.GetInputDevices();
         if (inputDevice < inputs.Count)
+        {
             config.InputDeviceId = inputs[inputDevice].DeviceId;
+        }
 
         var outputs = OwnaudioNet.GetOutputDevices();
         if (outputDevice < outputs.Count)
+        {
             config.OutputDeviceId = outputs[outputDevice].DeviceId;
+        }
 
         Log.Information("Audio passthrough: input [{In}] -> output [{Out}]", inputDevice, outputDevice);
 
@@ -111,9 +115,14 @@ public static class InteractiveReceiver
                 {
                     currentWritePos = writePos;
                     if (currentWritePos <= lastProcessedEnd)
+                    {
                         continue;
+                    }
+
                     if (currentWritePos - lastProcessedEnd < Constants.SampleRate)
+                    {
                         continue;
+                    }
 
                     var lookback = profile.SamplesPerBit * profile.PreambleBits;
                     var snapStart = Math.Max(0, lastProcessedEnd - lookback);
@@ -147,7 +156,9 @@ public static class InteractiveReceiver
                     lock (bufferLock)
                     {
                         if (currentWritePos > keepSamples + Constants.SampleRate)
+                        {
                             lastProcessedEnd = currentWritePos - keepSamples;
+                        }
                     }
                 }
 
@@ -175,12 +186,16 @@ public static class InteractiveReceiver
             OwnaudioNet.Shutdown();
         }
 
-        Log.Information("Receiver stopped. Decoded {Count} messages.", messageCount);
+        Log.Information("Receiver stopped. Decoded {Count} messages", messageCount);
     }
 
     private static void CompactIfNeeded(float[] ringBuffer, ref int writePos, ref int lastProcessedEnd, int capacity, int incoming)
     {
-        if (writePos + incoming < capacity) return;
+        if (writePos + incoming < capacity)
+        {
+            return;
+        }
+
         var keep = Math.Min(writePos, capacity / 2);
         var discard = writePos - keep;
         if (discard > 0)
@@ -204,7 +219,10 @@ public static class InteractiveReceiver
         for (var i = 0; i < numBlocks; i++)
         {
             var offset = samples.Length - numBlocks * blockSize + i * blockSize;
-            if (offset < 0) continue;
+            if (offset < 0)
+            {
+                continue;
+            }
 
             var mark = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqMark);
             var space = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqSpace);

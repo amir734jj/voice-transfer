@@ -88,7 +88,9 @@ public static class SenderMode
 
         var outputs = OwnaudioNet.GetOutputDevices();
         if (deviceIndex < outputs.Count)
+        {
             config.OutputDeviceId = outputs[deviceIndex].DeviceId;
+        }
 
         OwnaudioNet.Initialize(config);
         OwnaudioNet.Start();
@@ -108,7 +110,7 @@ public static class SenderMode
             while (!source.IsEndOfStream)
                 Thread.Sleep(50);
 
-            Log.Information("Playback complete.");
+            Log.Information("Playback complete");
 
             mixer.Stop();
             mixer.Dispose();

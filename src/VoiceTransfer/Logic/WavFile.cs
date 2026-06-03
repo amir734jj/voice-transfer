@@ -68,7 +68,10 @@ public static class WavFile
                     br.ReadInt16(); // block align
                     bitsPerSample = br.ReadInt16();
                     if (chunkSize > 16)
+                    {
                         br.ReadBytes(chunkSize - 16);
+                    }
+
                     break;
 
                 case "data":
