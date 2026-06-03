@@ -76,6 +76,26 @@ VoiceTransfer send -f data.bin --baud 200 --fec 5 --amplitude 0.2
 VoiceTransfer receive -o data.bin --baud 200 --fec 5
 ```
 
+## Building
+
+Requires [.NET 10 SDK](https://dotnet.microsoft.com/download).
+
+```bash
+# Debug build
+dotnet build src/VoiceTransfer/VoiceTransfer.csproj
+
+# Self-contained single-file publish (Windows)
+dotnet publish src/VoiceTransfer/VoiceTransfer.csproj -c Release -r win-x64
+
+# Self-contained single-file publish (Linux)
+dotnet publish src/VoiceTransfer/VoiceTransfer.csproj -c Release -r linux-x64
+
+# Self-contained single-file publish (macOS)
+dotnet publish src/VoiceTransfer/VoiceTransfer.csproj -c Release -r osx-arm64
+```
+
+Published binaries are in `src/VoiceTransfer/bin/Release/net10.0/<rid>/publish/`.
+
 ## How it works
 
 1. **Frame encoding** — input data is base64-encoded, optionally encrypted (AES-256-GCM), wrapped in a frame with preamble, sync byte, length header, and CRC-16
