@@ -1,5 +1,7 @@
 using CommandLine;
 using Serilog;
+using Velopack;
+using Velopack.Sources;
 using VoiceTransfer.Audio;
 using VoiceTransfer.Commands;
 using VoiceTransfer.Modes;
@@ -14,6 +16,8 @@ using VoiceTransfer.Modes;
 // the narrowband FSK signal from broadband human voice.
 // -----------------------------------------------------------
 
+VelopackApp.Build().Run();
+
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Information()
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
@@ -21,6 +25,8 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
+    await CheckForUpdates();
+
     var parser = new Parser(settings =>
     {
         settings.HelpWriter = Console.Error;
@@ -58,4 +64,28 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+async Task CheckForUpdates()
+{
+    try
+    {
+        var mgr = new UpdateManager(new GithubSource("https://github.com/amir734jj/voice-transfer", null, false));
+        if (!mgr.IsInstalled)
+            return;
+
+        var newVersion = await mgr.CheckForUpdatesAsync();
+        if (newVersion == null)
+            return;
+
+        Log.Information("Downloading update v{Version}", newVersion.TargetFullRelease.Version);
+        await mgr.DownloadUpdatesAsync(newVersion);
+
+        Log.Information("Update downloaded, restarting");
+        mgr.ApplyUpdatesAndRestart(newVersion.TargetFullRelease);
+    }
+    catch (Exception ex)
+    {
+        Log.Debug(ex, "Update check skipped");
+    }
 }
