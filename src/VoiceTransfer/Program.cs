@@ -90,8 +90,9 @@ async Task CheckForUpdates()
         Log.Information("Downloading update v{Version}", newVersion.TargetFullRelease.Version);
         await mgr.DownloadUpdatesAsync(newVersion);
 
-        Log.Information("Update downloaded, restarting");
-        mgr.ApplyUpdatesAndRestart(newVersion.TargetFullRelease, args);
+        Log.Information("Update downloaded, applying and exiting");
+        mgr.WaitExitThenApplyUpdates(newVersion.TargetFullRelease, silent: true, restart: true, restartArgs: args);
+        Environment.Exit(0);
     }
     catch (Exception ex)
     {
