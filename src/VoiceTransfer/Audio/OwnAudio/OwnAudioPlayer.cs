@@ -21,13 +21,15 @@ internal sealed class OwnAudioPlayer : IAudioPlayer
             EnableInput = false
         };
 
+        OwnaudioNet.Initialize(config);
         var outputs = OwnaudioNet.GetOutputDevices();
         if (outputDeviceIndex < outputs.Count)
         {
+            OwnaudioNet.Shutdown();
             config.OutputDeviceId = outputs[outputDeviceIndex].DeviceId;
+            OwnaudioNet.Initialize(config);
         }
 
-        OwnaudioNet.Initialize(config);
         OwnaudioNet.Start();
 
         _mixer = new AudioMixer(OwnaudioNet.Engine!.UnderlyingEngine);

@@ -17,19 +17,29 @@ internal sealed class OwnAudioDuplex : IAudioDuplex
             EnableInput = true
         };
 
+        OwnaudioNet.Initialize(config);
         var inputs = OwnaudioNet.GetInputDevices();
+        var outputs = OwnaudioNet.GetOutputDevices();
+        var needReinit = false;
+
         if (inputDeviceIndex < inputs.Count)
         {
             config.InputDeviceId = inputs[inputDeviceIndex].DeviceId;
+            needReinit = true;
         }
 
-        var outputs = OwnaudioNet.GetOutputDevices();
         if (outputDeviceIndex < outputs.Count)
         {
             config.OutputDeviceId = outputs[outputDeviceIndex].DeviceId;
+            needReinit = true;
         }
 
-        OwnaudioNet.Initialize(config);
+        if (needReinit)
+        {
+            OwnaudioNet.Shutdown();
+            OwnaudioNet.Initialize(config);
+        }
+
         OwnaudioNet.Start();
     }
 

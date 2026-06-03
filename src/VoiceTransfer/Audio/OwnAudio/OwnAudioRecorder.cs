@@ -17,13 +17,15 @@ internal sealed class OwnAudioRecorder : IAudioRecorder
             EnableInput = true
         };
 
+        OwnaudioNet.Initialize(config);
         var inputs = OwnaudioNet.GetInputDevices();
         if (inputDeviceIndex < inputs.Count)
         {
+            OwnaudioNet.Shutdown();
             config.InputDeviceId = inputs[inputDeviceIndex].DeviceId;
+            OwnaudioNet.Initialize(config);
         }
 
-        OwnaudioNet.Initialize(config);
         OwnaudioNet.Start();
     }
 
