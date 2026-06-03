@@ -80,29 +80,24 @@ internal sealed class SoundFlowPlayer : IAudioPlayer
 
     public void Play(float[] samples)
     {
-        using var done = new ManualResetEventSlim(false);
-        var queue = new QueueDataProvider(_format);
+        var provider = new RawDataProvider(samples, _format.SampleRate);
+        var player = new SoundPlayer(_engine, _format, provider);
 
-        // Queue all samples BEFORE creating the player to avoid a race
-        // where the reader sees an empty queue and fires PlaybackEnded immediately.
-        queue.AddSamples(samples);
-        queue.CompleteAdding();
+        _device.MasterMixer.AddComponent(player);
+        player.Play();
 
-        var player = new SoundPlayer(_engine, _format, queue);
-
-        try
+        // Poll until all samples have been consumed by the audio engine
+        while (provider.Position < provider.Length)
         {
-            player.PlaybackEnded += (_, _) => done.Set();
-            _device.MasterMixer.AddComponent(player);
-            player.Play();
-            done.Wait();
-            _device.MasterMixer.RemoveComponent(player);
+            Thread.Sleep(10);
         }
-        finally
-        {
-            player.Dispose();
-            queue.Dispose();
-        }
+
+        // Let the last buffer reach the hardware
+        Thread.Sleep(50);
+
+        _device.MasterMixer.RemoveComponent(player);
+        player.Dispose();
+        provider.Dispose();
     }
 
     public void Dispose()

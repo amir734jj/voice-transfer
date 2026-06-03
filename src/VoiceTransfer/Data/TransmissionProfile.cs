@@ -138,7 +138,7 @@ public class TransmissionProfile
 
     public void Validate()
     {
-        if (BaudRate < 50 || BaudRate > 2400)
+        if (BaudRate is < 50 or > 2400)
         {
             throw new ArgumentException($"BaudRate must be 50-2400, got {BaudRate}.");
         }
@@ -154,7 +154,7 @@ public class TransmissionProfile
                 BaudRate, binWidth, freqSep);
         }
 
-        if (Amplitude <= 0 || Amplitude > 1.0)
+        if (Amplitude is <= 0 or > 1.0)
         {
             throw new ArgumentException($"Amplitude must be in (0, 1.0], got {Amplitude}.");
         }
@@ -179,12 +179,12 @@ public class TransmissionProfile
             throw new ArgumentException($"FecRepeat must be an odd number 1-9, got {FecRepeat}.");
         }
 
-        if (FreqMark < 300 || FreqMark > 3400)
+        if (FreqMark is < 300 or > 3400)
         {
             throw new ArgumentException($"FreqMark must be 300-3400 Hz (telephone passband), got {FreqMark}.");
         }
 
-        if (FreqSpace < 300 || FreqSpace > 3400)
+        if (FreqSpace is < 300 or > 3400)
         {
             throw new ArgumentException($"FreqSpace must be 300-3400 Hz (telephone passband), got {FreqSpace}.");
         }
