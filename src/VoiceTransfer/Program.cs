@@ -30,22 +30,22 @@ try
     parser.ParseArguments<SendOptions, ReceiveOptions, LiveSendOptions, LiveReceiveOptions>(args)
         .WithParsed<SendOptions>(opts =>
         {
-            var audio = AudioBackendFactory.Create();
+            var audio = AudioBackendFactory.Create(opts.AudioEngine);
             SenderMode.Run(audio, opts.InputFile, opts.OutputWav, opts.DeviceIndex, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<ReceiveOptions>(opts =>
         {
-            var audio = AudioBackendFactory.Create();
+            var audio = AudioBackendFactory.Create(opts.AudioEngine);
             ReceiverMode.Run(audio, opts.OutputFile, opts.InputWav, opts.DeviceIndex, opts.TimeoutSeconds, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<LiveSendOptions>(opts =>
         {
-            var audio = AudioBackendFactory.Create();
+            var audio = AudioBackendFactory.Create(opts.AudioEngine);
             InteractiveSender.Run(audio, opts.DeviceIndex, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<LiveReceiveOptions>(opts =>
         {
-            var audio = AudioBackendFactory.Create(opts.Loopback);
+            var audio = AudioBackendFactory.Create(opts.AudioEngine, opts.Loopback);
             InteractiveReceiver.Run(audio, opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Loopback, opts.Password);
         })
         .WithNotParsed(_ => { }); // CommandLineParser already prints help

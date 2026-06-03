@@ -39,6 +39,9 @@ internal abstract class ProfileOptions
     [Option("password", HelpText = "Encryption password (AES-256-GCM). Must match on sender & receiver. Omit for no encryption.")]
     public string? Password { get; set; }
 
+    [Option("audio-engine", Default = "auto", HelpText = "Audio engine: auto (default), ownaudio, naudio (Windows), soundflow")]
+    public string AudioEngine { get; set; } = "auto";
+
     public TransmissionProfile BuildProfile() =>
         TransmissionProfile.FromOptions(Preset, BaudRate, PreambleBits,
             Amplitude, SignalThreshold, DecisionRatio, FecRepeat,

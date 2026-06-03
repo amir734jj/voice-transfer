@@ -1,6 +1,7 @@
 using Serilog;
 using VoiceTransfer.Audio;
 using VoiceTransfer.Data;
+using VoiceTransfer.Interfaces;
 using VoiceTransfer.Logic;
 
 namespace VoiceTransfer.Modes;
