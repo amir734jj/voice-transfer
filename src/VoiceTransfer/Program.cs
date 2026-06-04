@@ -37,27 +37,34 @@ try
         .WithParsed<SendOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
-            SenderMode.Run(audio, opts.InputFile, opts.OutputWav, opts.DeviceIndex, opts.BuildProfile(), opts.Password);
+            var device = DeviceResolver.ResolveOutput(audio, opts.DeviceIndex);
+            SenderMode.Run(audio, opts.InputFile, opts.OutputWav, device, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<ReceiveOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
-            ReceiverMode.Run(audio, opts.OutputFile, opts.InputWav, opts.DeviceIndex, opts.TimeoutSeconds, opts.BuildProfile(), opts.Password);
+            var device = DeviceResolver.ResolveInput(audio, opts.DeviceIndex);
+            ReceiverMode.Run(audio, opts.OutputFile, opts.InputWav, device, opts.TimeoutSeconds, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<LiveSendOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
-            InteractiveSender.Run(audio, opts.DeviceIndex, opts.BuildProfile(), opts.Password);
+            var device = DeviceResolver.ResolveOutput(audio, opts.DeviceIndex);
+            InteractiveSender.Run(audio, device, opts.BuildProfile(), opts.Password);
         })
         .WithParsed<LiveReceiveOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine, opts.Loopback);
-            InteractiveReceiver.Run(audio, opts.DeviceIndex, opts.OutputDeviceIndex, opts.BuildProfile(), opts.Loopback, opts.Passthrough, opts.Password);
+            var inputDevice = DeviceResolver.ResolveInput(audio, opts.DeviceIndex);
+            var outputDevice = DeviceResolver.ResolveOutput(audio, opts.OutputDeviceIndex);
+            InteractiveReceiver.Run(audio, inputDevice, outputDevice, opts.BuildProfile(), opts.Loopback, opts.Passthrough, opts.Password);
         })
         .WithParsed<TestOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
-            TestMode.Run(audio, opts.DeviceIndex, opts.OutputDeviceIndex, opts.Duration);
+            var inputDevice = DeviceResolver.ResolveInput(audio, opts.DeviceIndex);
+            var outputDevice = DeviceResolver.ResolveOutput(audio, opts.OutputDeviceIndex);
+            TestMode.Run(audio, inputDevice, outputDevice, opts.Duration);
         })
         .WithNotParsed(_ => { }); // CommandLineParser already prints help
 }

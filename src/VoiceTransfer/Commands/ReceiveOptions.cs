@@ -11,7 +11,7 @@ internal class ReceiveOptions : ProfileOptions
     [Option('i', "input", HelpText = "Read from WAV file instead of microphone.")]
     public string? InputWav { get; set; }
 
-    [Option('d', "device", Default = 0, HelpText = "Audio input device index.")]
+    [Option('d', "device", Default = -1, HelpText = "Audio input device index (-1 = auto-detect hardware device).")]
     public int DeviceIndex { get; set; }
 
     [Option('t', "timeout", Default = 60, HelpText = "Recording timeout in seconds (microphone mode).")]
