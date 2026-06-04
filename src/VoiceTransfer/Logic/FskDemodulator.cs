@@ -102,6 +102,7 @@ public class FskDemodulator(TransmissionProfile profile)
     /// <summary>
     /// Find the best bit alignment offset by trying multiple sub-bit offsets
     /// and scoring the quality of the demodulated preamble pattern.
+    /// Tries every sample offset within one bit period for maximum precision.
     /// </summary>
     public int FindBestAlignment(float[] samples, int searchStart, int searchLength)
     {
@@ -109,11 +110,8 @@ public class FskDemodulator(TransmissionProfile profile)
         var bestOffset = searchStart;
         double bestScore = -1;
 
-        // Try offsets from 0 to SamplesPerBit-1 within the search region
-        var steps = Math.Min(blockSize, 20); // limit search steps for performance
-        var stepSize = Math.Max(1, blockSize / steps);
-
-        for (var tryOffset = 0; tryOffset < blockSize; tryOffset += stepSize)
+        // Try every sample offset within one bit period
+        for (var tryOffset = 0; tryOffset < blockSize; tryOffset++)
         {
             var offset = searchStart + tryOffset;
             if (offset + searchLength > samples.Length)
@@ -123,7 +121,7 @@ public class FskDemodulator(TransmissionProfile profile)
 
             // Demodulate a stretch of bits and check for alternating pattern
             var numTestBits = Math.Min(32, (searchLength - tryOffset) / blockSize);
-            if (numTestBits < 8)
+            if (numTestBits < 6)
             {
                 continue;
             }
@@ -140,6 +138,14 @@ public class FskDemodulator(TransmissionProfile profile)
                     if (prevBit.HasValue && bit != prevBit.Value)
                     {
                         score += 2.0; // reward alternation (preamble pattern)
+                    }
+                }
+                else
+                {
+                    // Even invalid blocks contribute a small score if they alternate
+                    if (prevBit.HasValue && bit != prevBit.Value)
+                    {
+                        score += 0.5;
                     }
                 }
                 prevBit = bit;

@@ -10,7 +10,7 @@ namespace VoiceTransfer.Commands;
 /// </summary>
 internal abstract class ProfileOptions
 {
-    [Option('p', "preset", Default = "normal", HelpText = "Speed preset: slow (150 baud), normal (300 baud), fast (350 baud). Sender & receiver must match.")]
+    [Option('p', "preset", Default = "normal", HelpText = "Speed preset: slow (150 baud), normal (300 baud), fast (350 baud), robust (100 baud, over-the-air). Sender & receiver must match.")]
     public string Preset { get; set; } = "normal";
 
     [Option("baud", HelpText = "Override baud rate (bits/sec). Sender & receiver must match.")]

@@ -76,53 +76,70 @@ public static class ReceiverMode
     public static byte[]? DemodulateAndDecode(float[] samples, TransmissionProfile profile, string? password = null)
     {
         Log.Debug("Step 1: Signal detection...");
+        var demod = new FskDemodulator(profile);
 
         // Find approximate start of signal (first block with energy at FSK frequencies)
         var signalStart = FindSignalStart(samples, profile);
-        if (signalStart < 0)
+        if (signalStart >= 0)
         {
-            Log.Debug("No FSK signal detected in audio");
-            return null;
-        }
+            Log.Debug("Signal detected at sample {Start} ({Time:F3}s)",
+                signalStart, (double)signalStart / Constants.SampleRate);
 
-        Log.Debug("Signal detected at sample {Start} ({Time:F3}s)",
-            signalStart, (double)signalStart / Constants.SampleRate);
+            // Find best bit alignment using preamble correlation
+            Log.Debug("Step 2: Bit synchronization via preamble...");
+            var searchLen = Math.Min(profile.PreambleBits * profile.SamplesPerBit * 2, samples.Length - signalStart);
+            var alignedStart = demod.FindBestAlignment(samples, signalStart, searchLen);
 
-        // Find best bit alignment using preamble correlation
-        Log.Debug("Step 2: Bit synchronization via preamble...");
-        var searchLen = Math.Min(profile.PreambleBits * profile.SamplesPerBit * 2, samples.Length - signalStart);
-        var demod = new FskDemodulator(profile);
-        var alignedStart = demod.FindBestAlignment(samples, signalStart, searchLen);
+            Log.Debug("Aligned to sample {Start}", alignedStart);
 
-        Log.Debug("Aligned to sample {Start}", alignedStart);
-
-        // Try the best alignment and a few nearby offsets
-        for (var nudge = -profile.SamplesPerBit / 2; nudge <= profile.SamplesPerBit / 2; nudge += profile.SamplesPerBit / 8)
-        {
-            var tryStart = alignedStart + nudge;
-            if (tryStart < 0)
+            // Try the best alignment and a few nearby offsets
+            for (var nudge = -profile.SamplesPerBit / 2; nudge <= profile.SamplesPerBit / 2; nudge += profile.SamplesPerBit / 8)
             {
-                continue;
+                var tryStart = alignedStart + nudge;
+                if (tryStart < 0)
+                {
+                    continue;
+                }
+
+                var result = TryDemodulate(samples, tryStart, demod, profile.FecRepeat, password);
+                if (result != null)
+                {
+                    Log.Debug("Successful decode at offset {Offset} (nudge={Nudge})", tryStart, nudge);
+                    return result;
+                }
             }
 
-            var result = TryDemodulate(samples, tryStart, demod, profile.FecRepeat, password);
-            if (result != null)
+            // Brute force: try every single-sample offset in a bit-width window
+            Log.Debug("Step 3: Brute-force alignment search...");
+            for (var offset = Math.Max(0, signalStart - profile.SamplesPerBit);
+                 offset < signalStart + profile.SamplesPerBit * 2 && offset < samples.Length;
+                 offset++)
             {
-                Log.Debug("Successful decode at offset {Offset} (nudge={Nudge})", tryStart, nudge);
-                return result;
+                var result = TryDemodulate(samples, offset, demod, profile.FecRepeat, password);
+                if (result != null)
+                {
+                    Log.Debug("Brute-force decode succeeded at offset {Offset}", offset);
+                    return result;
+                }
             }
         }
+        else
+        {
+            Log.Debug("Preamble detection failed -- falling back to full scan");
+        }
 
-        // Brute force: try every single-sample offset in a bit-width window
-        Log.Debug("Step 3: Brute-force alignment search...");
-        for (var offset = Math.Max(0, signalStart - profile.SamplesPerBit);
-             offset < signalStart + profile.SamplesPerBit * 2 && offset < samples.Length;
-             offset++)
+        // Step 4: Full-scan fallback -- preamble detection may fail over the air
+        // even though the data signal is present. Scan the entire audio at coarse
+        // intervals, trying to decode at each position.
+        Log.Debug("Step 4: Full-scan fallback (scanning entire audio)...");
+        var stepSize = profile.SamplesPerBit / 2; // half-bit resolution
+        for (var offset = 0; offset < samples.Length - profile.SamplesPerBit * 16; offset += stepSize)
         {
             var result = TryDemodulate(samples, offset, demod, profile.FecRepeat, password);
             if (result != null)
             {
-                Log.Debug("Brute-force decode succeeded at offset {Offset}", offset);
+                Log.Debug("Full-scan decode succeeded at offset {Offset} ({Time:F3}s)",
+                    offset, (double)offset / Constants.SampleRate);
                 return result;
             }
         }
@@ -136,15 +153,15 @@ public static class ReceiverMode
 
         // Count valid bits to check if there's enough signal
         var validCount = valid.Count(v => v);
-        if (validCount < 20)
+        if (validCount < 16)
         {
             return null; // too few valid bits for a frame
         }
 
-        // Find longest run allowing small gaps of invalid bits.
-        // FEC handles any bit errors from low-confidence blocks, but comfort noise
-        // (many consecutive invalid blocks) correctly splits runs.
-        var maxGap = Math.Max(3, fecRepeat * 2);
+        // Strategy 1: Find longest run allowing generous gaps of invalid bits.
+        // Room reverb and noise bursts can create long stretches of ambiguous blocks,
+        // but the underlying bit guess is often still correct. FEC handles errors.
+        var maxGap = Math.Max(20, fecRepeat * 8);
         var runStart = -1;
         var bestRunStart = 0;
         var bestRunEnd = 0;
@@ -183,35 +200,53 @@ public static class ReceiverMode
         }
 
         var bestRunLen = bestRunEnd - bestRunStart + 1;
-        if (bestRunLen < 20)
+        if (bestRunLen >= 16)
         {
-            return null;
+            var runBits = new bool[bestRunLen];
+            Array.Copy(bits, bestRunStart, runBits, 0, bestRunLen);
+
+            var result = FrameCodec.Decode(runBits, fecRepeat, password);
+            if (result != null)
+            {
+                return result;
+            }
         }
 
-        // Extract the run (including any gap bits -- they have best-guess values)
-        var runBits = new bool[bestRunLen];
-        Array.Copy(bits, bestRunStart, runBits, 0, bestRunLen);
+        // Strategy 2: Try ALL demodulated bits regardless of validity.
+        // Over-the-air, many blocks register as "invalid" (low confidence) but
+        // the best-guess bit value is still often correct. FEC + CRC will catch
+        // truly corrupted data, so it's safe to attempt.
+        if (bits.Length >= 16)
+        {
+            return FrameCodec.Decode(bits, fecRepeat, password);
+        }
 
-        // Try to decode frame (with FEC)
-        return FrameCodec.Decode(runBits, fecRepeat, password);
+        return null;
     }
 
     /// <summary>
-    /// Find the sample index where FSK signal first appears by detecting the
-    /// preamble's alternating bit pattern. This reliably distinguishes actual
-    /// FSK signal from comfort noise (where power ratios can pass by chance).
+    /// Find the sample index where FSK signal first appears.
+    /// Uses a sliding window that counts blocks with clear FSK energy.
+    /// Tolerates individual invalid blocks (caused by reverb, noise bursts).
     /// </summary>
     private static int FindSignalStart(float[] samples, TransmissionProfile profile)
     {
         var blockSize = profile.SamplesPerBit;
         var numBlocks = samples.Length / blockSize;
-        const int windowSize = 8; // check 8 consecutive blocks for alternating pattern
+        const int windowSize = 12; // wider window for statistical robustness
+        const int minValid = 4;    // need at least this many valid blocks in the window
+        const int minAlternations = 3; // relaxed alternation requirement
+
+        if (numBlocks < windowSize)
+        {
+            return numBlocks > 0 ? 0 : -1; // audio too short, try from beginning
+        }
 
         for (var i = 0; i <= numBlocks - windowSize; i++)
         {
-            var valid = true;
+            var validCount = 0;
             var alternations = 0;
-            bool? prevBit = null;
+            bool? prevValidBit = null;
 
             for (var j = 0; j < windowSize; j++)
             {
@@ -221,26 +256,27 @@ public static class ReceiverMode
                 var maxPower = Math.Max(markPower, spacePower);
                 var minPower = Math.Min(markPower, spacePower);
 
-                // Need strong enough signal with clear frequency dominance
-                if (maxPower < profile.SignalThreshold ||
-                    (minPower > 0 && maxPower / minPower < profile.DecisionRatio))
+                if (maxPower < profile.SignalThreshold)
                 {
-                    valid = false;
-                    break;
+                    continue; // skip, don't break
                 }
 
+                if (minPower > 0 && maxPower / minPower < profile.DecisionRatio)
+                {
+                    continue; // skip ambiguous block
+                }
+
+                validCount++;
                 var bit = markPower > spacePower;
-                if (prevBit.HasValue && bit != prevBit.Value)
+                if (prevValidBit.HasValue && bit != prevValidBit.Value)
                 {
                     alternations++;
                 }
 
-                prevBit = bit;
+                prevValidBit = bit;
             }
 
-            // Preamble has perfect alternation (7 out of 7 transitions for 8 bits)
-            // Allow 1 miss for noise robustness
-            if (valid && alternations >= windowSize - 2)
+            if (validCount >= minValid && alternations >= minAlternations)
             {
                 return i * blockSize;
             }
