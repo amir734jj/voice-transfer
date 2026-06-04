@@ -51,7 +51,7 @@ public sealed class PortAudioBackend : IAudioBackend
 
     public bool SupportsLoopback => false;
 
-    public IAudioPlayer CreatePlayer(int outputDeviceIndex)
+    public IAudioPlayer CreatePlayer(int outputDeviceIndex, bool wasapiOut = false)
     {
         EnsureInitialized();
         var deviceIndex = ResolveOutputDevice(outputDeviceIndex);

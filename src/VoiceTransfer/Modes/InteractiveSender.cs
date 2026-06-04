@@ -13,7 +13,7 @@ namespace VoiceTransfer.Modes;
 /// </summary>
 public static class InteractiveSender
 {
-    public static void Run(IAudioBackend audio, int deviceIndex, TransmissionProfile profile, string? password = null)
+    public static void Run(IAudioBackend audio, int deviceIndex, TransmissionProfile profile, string? password = null, bool wasapiOut = false)
     {
         profile.LogSettings();
 
@@ -23,7 +23,7 @@ public static class InteractiveSender
         Log.Information("Type text and press Enter to transmit. Up/Down for history. Ctrl+C to quit");
         Log.Information("");
 
-        using var player = audio.CreatePlayer(deviceIndex);
+        using var player = audio.CreatePlayer(deviceIndex, wasapiOut);
 
         Console.CancelKeyPress += (_, e) =>
         {

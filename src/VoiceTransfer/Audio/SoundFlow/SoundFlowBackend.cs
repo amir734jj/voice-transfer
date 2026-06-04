@@ -26,7 +26,7 @@ public sealed class SoundFlowBackend : IAudioBackend
 
     public bool SupportsLoopback => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
-    public IAudioPlayer CreatePlayer(int outputDeviceIndex) =>
+    public IAudioPlayer CreatePlayer(int outputDeviceIndex, bool wasapiOut = false) =>
         new SoundFlowPlayer(outputDeviceIndex);
 
     public IAudioRecorder CreateRecorder(int inputDeviceIndex) =>

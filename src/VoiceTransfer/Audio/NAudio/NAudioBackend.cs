@@ -81,8 +81,8 @@ public sealed class NAudioBackend : IAudioBackend
 
     public bool SupportsLoopback => true;
 
-    public IAudioPlayer CreatePlayer(int outputDeviceIndex) =>
-        new NAudioPlayer(outputDeviceIndex);
+    public IAudioPlayer CreatePlayer(int outputDeviceIndex, bool wasapiOut = false) =>
+        new NAudioPlayer(outputDeviceIndex, wasapiOut);
 
     public IAudioRecorder CreateRecorder(int inputDeviceIndex) =>
         new NAudioRecorder(inputDeviceIndex);

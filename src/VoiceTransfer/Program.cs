@@ -38,7 +38,7 @@ try
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
             var device = DeviceResolver.ResolveOutput(audio, opts.DeviceIndex);
-            SenderMode.Run(audio, opts.InputFile, opts.OutputWav, device, opts.BuildProfile(), opts.Password);
+            SenderMode.Run(audio, opts.InputFile, opts.OutputWav, device, opts.BuildProfile(), opts.Password, opts.WasapiOut);
         })
         .WithParsed<ReceiveOptions>(opts =>
         {
@@ -50,7 +50,7 @@ try
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
             var device = DeviceResolver.ResolveOutput(audio, opts.DeviceIndex);
-            InteractiveSender.Run(audio, device, opts.BuildProfile(), opts.Password);
+            InteractiveSender.Run(audio, device, opts.BuildProfile(), opts.Password, opts.WasapiOut);
         })
         .WithParsed<LiveReceiveOptions>(opts =>
         {

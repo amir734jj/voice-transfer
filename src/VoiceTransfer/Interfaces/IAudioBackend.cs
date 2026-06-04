@@ -9,7 +9,7 @@ public interface IAudioBackend
     IReadOnlyList<string> GetInputDeviceNames();
     IReadOnlyList<string> GetOutputDeviceNames();
     bool SupportsLoopback { get; }
-    IAudioPlayer CreatePlayer(int outputDeviceIndex);
+    IAudioPlayer CreatePlayer(int outputDeviceIndex, bool wasapiOut = false);
     IAudioRecorder CreateRecorder(int inputDeviceIndex);
     IAudioRecorder? CreateLoopbackRecorder();
     IAudioDuplex CreateDuplex(int inputDeviceIndex, int outputDeviceIndex);

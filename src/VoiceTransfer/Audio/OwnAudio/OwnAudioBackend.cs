@@ -23,7 +23,7 @@ public sealed class OwnAudioBackend : IAudioBackend
 
     public bool SupportsLoopback => false;
 
-    public IAudioPlayer CreatePlayer(int outputDeviceIndex) =>
+    public IAudioPlayer CreatePlayer(int outputDeviceIndex, bool wasapiOut = false) =>
         new OwnAudioPlayer(outputDeviceIndex);
 
     public IAudioRecorder CreateRecorder(int inputDeviceIndex) =>

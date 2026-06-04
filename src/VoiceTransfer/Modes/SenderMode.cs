@@ -15,7 +15,7 @@ namespace VoiceTransfer.Modes;
 /// </summary>
 public static class SenderMode
 {
-    public static void Run(IAudioBackend audio, string inputFile, string? outputWav, int deviceIndex, TransmissionProfile profile, string? password = null)
+    public static void Run(IAudioBackend audio, string inputFile, string? outputWav, int deviceIndex, TransmissionProfile profile, string? password = null, bool wasapiOut = false)
     {
         // 1. Read and validate the input file
         if (!File.Exists(inputFile))
@@ -67,15 +67,15 @@ public static class SenderMode
         }
         else
         {
-            PlayAudio(audio, allSamples, deviceIndex);
+            PlayAudio(audio, allSamples, deviceIndex, wasapiOut);
         }
     }
 
-    private static void PlayAudio(IAudioBackend audio, float[] samples, int deviceIndex)
+    private static void PlayAudio(IAudioBackend audio, float[] samples, int deviceIndex, bool wasapiOut = false)
     {
-        Log.Information("Using audio output device index {Index}", deviceIndex);
+        Log.Information("Using audio output device index {Index}{Wasapi}", deviceIndex, wasapiOut ? " (WASAPI)" : "");
 
-        using var player = audio.CreatePlayer(deviceIndex);
+        using var player = audio.CreatePlayer(deviceIndex, wasapiOut);
 
         var durationSec = (double)samples.Length / Constants.SampleRate;
         Log.Information("Playing FSK audio ({Duration:F1}s)... Press Ctrl+C to abort.", durationSec);

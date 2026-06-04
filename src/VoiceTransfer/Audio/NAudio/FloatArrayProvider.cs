@@ -19,7 +19,7 @@ internal sealed class FloatArrayProvider(float[] samples, WaveFormat format) : I
             return 0;
         }
 
-        Array.Copy(samples, _position, buffer, offset, available);
+        Buffer.BlockCopy(samples, _position * sizeof(float), buffer, offset * sizeof(float), available * sizeof(float));
         _position += available;
         return available;
     }
