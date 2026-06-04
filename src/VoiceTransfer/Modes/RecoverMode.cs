@@ -14,7 +14,10 @@ public static class RecoverMode
     public static void Run(string inputWav, string outputFile, string? password)
     {
         var samples = ReceiverMode.ReadWavPublic(inputWav);
-        if (samples.Length == 0) return;
+        if (samples.Length == 0)
+        {
+            return;
+        }
 
         Log.Information("Recovery mode: {Samples} samples ({Duration:F1}s)",
             samples.Length, (double)samples.Length / Constants.SampleRate);
@@ -87,7 +90,11 @@ public static class RecoverMode
             for (var b = 0; b < 20; b++)
             {
                 var offset = midpoint + b * blockSize;
-                if (offset + blockSize > samples.Length) break;
+                if (offset + blockSize > samples.Length)
+                {
+                    break;
+                }
+
                 totalPower += FskDemodulator.GoertzelPower(samples, offset, blockSize, freq);
             }
             var avgPower = totalPower / 20;
@@ -100,7 +107,11 @@ public static class RecoverMode
         {
             var bs = Constants.SampleRate / baud;
             var offset = midpoint;
-            if (offset + bs > samples.Length) continue;
+            if (offset + bs > samples.Length)
+            {
+                continue;
+            }
+
             var mark = FskDemodulator.GoertzelPower(samples, offset, bs, 2200);
             var space = FskDemodulator.GoertzelPower(samples, offset, bs, 1800);
             var ratio = space > 0 ? mark / space : 999;
@@ -159,7 +170,10 @@ public static class RecoverMode
             {
                 var guardSamples = (int)(spb * guard);
                 var analysisLen = spb - 2 * guardSamples;
-                if (analysisLen < 16) continue;
+                if (analysisLen < 16)
+                {
+                    continue;
+                }
 
                 var numBits = (audioData.Length - alignedStart) / spb;
                 var markPow = new double[numBits];
@@ -186,7 +200,10 @@ public static class RecoverMode
                     else { markDuring0 += markPow[b]; spaceDuring0 += spacePow[b]; }
                     calCount++;
                 }
-                if (calCount < 20) continue;
+                if (calCount < 20)
+                {
+                    continue;
+                }
 
                 var half = calCount / 2;
                 markDuring1 /= half;
@@ -218,15 +235,23 @@ public static class RecoverMode
                         for (var b = calStart; b < calEnd; b++)
                         {
                             var expected = b % 2 == 0; // 1 for even, 0 for odd
-                            if (bits[b] != expected) preambleErrors++;
+                            if (bits[b] != expected)
+                            {
+                                preambleErrors++;
+                            }
                         }
                         var preamBer = (double)preambleErrors / (calEnd - calStart);
 
                         if (tFrac < 0.55 && tFrac > 0.45) // log only around midpoint
+                        {
                             Log.Information("    threshold={T:F3} (frac={F:F2}): preamble BER = {BER:P1}",
                                 threshold, tFrac, preamBer);
+                        }
 
-                        if (preamBer > 0.20) continue; // skip hopeless thresholds
+                        if (preamBer > 0.20)
+                        {
+                            continue; // skip hopeless thresholds
+                        }
 
                         var result = TryDecodeFromBits(bits, softBits, numBits, preamble, fec, password);
                         if (result != null)
@@ -311,21 +336,36 @@ public static class RecoverMode
         for (var posOff = -10; posOff <= 10; posOff++)
         {
             var dataPos = preamble + 8 + posOff;
-            if (dataPos < 0 || dataPos >= numBits) continue;
+            if (dataPos < 0 || dataPos >= numBits)
+            {
+                continue;
+            }
 
             var result = FrameCodec.DecodeFromPosition(bits, dataPos, fec, password);
-            if (result != null) return result;
+            if (result != null)
+            {
+                return result;
+            }
 
             result = FrameCodec.DecodeFromPositionSoft(softBits, dataPos, fec, password);
-            if (result != null) return result;
+            if (result != null)
+            {
+                return result;
+            }
         }
 
         // Sync byte search
         var hardResult = FrameCodec.Decode(bits, fec, password);
-        if (hardResult != null) return hardResult;
+        if (hardResult != null)
+        {
+            return hardResult;
+        }
 
         var softResult = FrameCodec.DecodeSoft(softBits, fec, password);
-        if (softResult != null) return softResult;
+        if (softResult != null)
+        {
+            return softResult;
+        }
 
         return null;
     }
@@ -408,7 +448,10 @@ public static class RecoverMode
             {
                 var guardSamples = (int)(spb * guard);
                 var analysisLen = spb - 2 * guardSamples;
-                if (analysisLen < 16) continue;
+                if (analysisLen < 16)
+                {
+                    continue;
+                }
 
                 // Compute raw Goertzel powers for all bit positions
                 var numBits = (preprocessed.Length - alignedStart) / spb;
@@ -532,7 +575,11 @@ public static class RecoverMode
             preamSpace += adjSpace[b];
             calCount++;
         }
-        if (calCount < 20 || preamMark < 1e-10 || preamSpace < 1e-10) return null;
+        if (calCount < 20 || preamMark < 1e-10 || preamSpace < 1e-10)
+        {
+            return null;
+        }
+
         preamMark /= calCount;
         preamSpace /= calCount;
         var gainRatio = preamMark / preamSpace;
@@ -556,21 +603,36 @@ public static class RecoverMode
             for (var posOff = -10; posOff <= 10; posOff++)
             {
                 var dataPos = preamble + 8 + posOff;
-                if (dataPos < 0 || dataPos >= numBits) continue;
+                if (dataPos < 0 || dataPos >= numBits)
+                {
+                    continue;
+                }
 
                 var result = FrameCodec.DecodeFromPosition(bits, dataPos, fec, password);
-                if (result != null) return result;
+                if (result != null)
+                {
+                    return result;
+                }
 
                 result = FrameCodec.DecodeFromPositionSoft(softBits, dataPos, fec, password);
-                if (result != null) return result;
+                if (result != null)
+                {
+                    return result;
+                }
             }
 
             // Also try finding sync byte in the hard/soft bits
             var hardResult = FrameCodec.Decode(bits, fec, password);
-            if (hardResult != null) return hardResult;
+            if (hardResult != null)
+            {
+                return hardResult;
+            }
 
             var softResult = FrameCodec.DecodeSoft(softBits, fec, password);
-            if (softResult != null) return softResult;
+            if (softResult != null)
+            {
+                return softResult;
+            }
         }
 
         return null;
@@ -624,7 +686,10 @@ public static class RecoverMode
     {
         var demod = new FskDemodulator(profile);
         var signalStart = FindSignalStartQuick(samples, profile);
-        if (signalStart < 0) return null;
+        if (signalStart < 0)
+        {
+            return null;
+        }
 
         demod.CalibrateFromSignal(samples, signalStart, samples.Length);
 
@@ -635,10 +700,16 @@ public static class RecoverMode
         for (var nudge = -profile.SamplesPerBit / 2; nudge <= profile.SamplesPerBit / 2; nudge += profile.SamplesPerBit / 8)
         {
             var tryStart = alignedStart + nudge;
-            if (tryStart < 0) continue;
+            if (tryStart < 0)
+            {
+                continue;
+            }
 
             var result = TryDecode(samples, tryStart, demod, profile, password);
-            if (result != null) return result;
+            if (result != null)
+            {
+                return result;
+            }
         }
 
         // Try expected data position
@@ -648,19 +719,34 @@ public static class RecoverMode
             for (var nudge = -profile.SamplesPerBit / 2; nudge <= profile.SamplesPerBit / 2; nudge += profile.SamplesPerBit / 4)
             {
                 var sampleOffset = alignedStart + nudge;
-                if (sampleOffset < 0) continue;
+                if (sampleOffset < 0)
+                {
+                    continue;
+                }
 
                 var (bits, _) = demod.DemodulateAll(samples, sampleOffset);
-                if (expectedDataBit >= bits.Length) continue;
+                if (expectedDataBit >= bits.Length)
+                {
+                    continue;
+                }
 
                 var result = FrameCodec.DecodeFromPosition(bits, expectedDataBit, profile.FecRepeat, password);
-                if (result != null) return result;
+                if (result != null)
+                {
+                    return result;
+                }
 
                 var softBits = demod.DemodulateAllSoft(samples, sampleOffset);
-                if (expectedDataBit >= softBits.Length) continue;
+                if (expectedDataBit >= softBits.Length)
+                {
+                    continue;
+                }
 
                 result = FrameCodec.DecodeFromPositionSoft(softBits, expectedDataBit, profile.FecRepeat, password);
-                if (result != null) return result;
+                if (result != null)
+                {
+                    return result;
+                }
             }
         }
 
@@ -670,10 +756,16 @@ public static class RecoverMode
     private static byte[]? TryDecode(float[] samples, int startOffset, FskDemodulator demod, TransmissionProfile profile, string? password)
     {
         var (bits, valid) = demod.DemodulateAll(samples, startOffset);
-        if (bits.Length < 16) return null;
+        if (bits.Length < 16)
+        {
+            return null;
+        }
 
         var result = FrameCodec.Decode(bits, profile.FecRepeat, password);
-        if (result != null) return result;
+        if (result != null)
+        {
+            return result;
+        }
 
         var softBits = demod.DemodulateAllSoft(samples, startOffset);
         return FrameCodec.DecodeSoft(softBits, profile.FecRepeat, password);
@@ -686,21 +778,30 @@ public static class RecoverMode
     {
         var blockSize = profile.SamplesPerBit;
         var numBlocks = samples.Length / blockSize;
-        if (numBlocks < 8) return numBlocks > 0 ? 0 : -1;
+        if (numBlocks < 8)
+        {
+            return numBlocks > 0 ? 0 : -1;
+        }
 
         var threshold = profile.SignalThreshold;
         var consecutive = 0;
         for (var i = 0; i < numBlocks; i++)
         {
             var offset = i * blockSize;
-            if (offset + blockSize > samples.Length) break;
+            if (offset + blockSize > samples.Length)
+            {
+                break;
+            }
+
             var mp = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqMark);
             var sp = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqSpace);
             if (mp + sp >= threshold)
             {
                 consecutive++;
                 if (consecutive >= 4)
+                {
                     return (i - 3) * blockSize;
+                }
             }
             else
             {

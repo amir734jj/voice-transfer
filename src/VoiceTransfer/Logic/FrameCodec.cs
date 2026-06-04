@@ -215,7 +215,9 @@ public static class FrameCodec
         }
 
         if (syncFoundCount > 0)
-            Log.Information("Found {Count} sync byte(s) but none decoded successfully", syncFoundCount);
+        {
+            Log.Debug("Found {Count} sync byte(s) but none decoded successfully", syncFoundCount);
+        }
 
         return null;
     }
@@ -227,7 +229,11 @@ public static class FrameCodec
     /// </summary>
     public static byte[]? DecodeFromPosition(bool[] bits, int dataStart, int fecRepeat, string? password = null)
     {
-        if (dataStart >= bits.Length) return null;
+        if (dataStart >= bits.Length)
+        {
+            return null;
+        }
+
         var remainLen = bits.Length - dataStart;
 
         if (fecRepeat <= 1)
@@ -242,30 +248,50 @@ public static class FrameCodec
         for (var trim = 0; trim < maxTrim; trim++)
         {
             var tryLen = remainLen - trim;
-            if (tryLen < fecRepeat * 4) break;
-            if (tryLen % fecRepeat != 0) continue;
+            if (tryLen < fecRepeat * 4)
+            {
+                break;
+            }
+
+            if (tryLen % fecRepeat != 0)
+            {
+                continue;
+            }
 
             var fecBits = new bool[tryLen];
             Array.Copy(bits, dataStart, fecBits, 0, tryLen);
             var deinterleaved = Fec.Deinterleave(fecBits, fecRepeat);
             var corrected = Fec.Decode(deinterleaved, fecRepeat);
             var result = TryDecodeData(corrected, password);
-            if (result != null) return result;
+            if (result != null)
+            {
+                return result;
+            }
         }
 
         // Truncation recovery
         for (var assumedPayload = 1; assumedPayload <= 200; assumedPayload++)
         {
             var origFecLen = (assumedPayload + 4) * 8 * fecRepeat;
-            if (origFecLen <= remainLen) continue;
-            if (origFecLen > remainLen * 3) break;
+            if (origFecLen <= remainLen)
+            {
+                continue;
+            }
+
+            if (origFecLen > remainLen * 3)
+            {
+                break;
+            }
 
             var padded = new bool[origFecLen];
             Array.Copy(bits, dataStart, padded, 0, Math.Min(remainLen, origFecLen));
             var deinterleaved = Fec.Deinterleave(padded, fecRepeat);
             var corrected = Fec.Decode(deinterleaved, fecRepeat);
             var result = TryDecodeData(corrected, password);
-            if (result != null) return result;
+            if (result != null)
+            {
+                return result;
+            }
         }
 
         return null;
@@ -276,7 +302,11 @@ public static class FrameCodec
     /// </summary>
     public static byte[]? DecodeFromPositionSoft(double[] softBits, int dataStart, int fecRepeat, string? password = null)
     {
-        if (dataStart >= softBits.Length) return null;
+        if (dataStart >= softBits.Length)
+        {
+            return null;
+        }
+
         var remainLen = softBits.Length - dataStart;
 
         if (fecRepeat <= 1)
@@ -291,30 +321,50 @@ public static class FrameCodec
         for (var trim = 0; trim < maxTrim; trim++)
         {
             var tryLen = remainLen - trim;
-            if (tryLen < fecRepeat * 4) break;
-            if (tryLen % fecRepeat != 0) continue;
+            if (tryLen < fecRepeat * 4)
+            {
+                break;
+            }
+
+            if (tryLen % fecRepeat != 0)
+            {
+                continue;
+            }
 
             var fecSoft = new double[tryLen];
             Array.Copy(softBits, dataStart, fecSoft, 0, tryLen);
             var deinterleaved = Fec.DeinterleaveSoft(fecSoft, fecRepeat);
             var corrected = Fec.DecodeSoft(deinterleaved, fecRepeat);
             var result = TryDecodeData(corrected, password);
-            if (result != null) return result;
+            if (result != null)
+            {
+                return result;
+            }
         }
 
         // Truncation recovery (soft)
         for (var assumedPayload = 1; assumedPayload <= 200; assumedPayload++)
         {
             var origFecLen = (assumedPayload + 4) * 8 * fecRepeat;
-            if (origFecLen <= remainLen) continue;
-            if (origFecLen > remainLen * 3) break;
+            if (origFecLen <= remainLen)
+            {
+                continue;
+            }
+
+            if (origFecLen > remainLen * 3)
+            {
+                break;
+            }
 
             var padded = new double[origFecLen];
             Array.Copy(softBits, dataStart, padded, 0, Math.Min(remainLen, origFecLen));
             var deinterleaved = Fec.DeinterleaveSoft(padded, fecRepeat);
             var corrected = Fec.DecodeSoft(deinterleaved, fecRepeat);
             var result = TryDecodeData(corrected, password);
-            if (result != null) return result;
+            if (result != null)
+            {
+                return result;
+            }
         }
 
         return null;
@@ -365,7 +415,10 @@ public static class FrameCodec
                 for (var i = 0; i < remainLen; i++)
                     corrected[i] = softBits[dataStart + i] > 0;
                 var result = TryDecodeData(corrected, password);
-                if (result != null) return result;
+                if (result != null)
+                {
+                    return result;
+                }
             }
             else
             {
@@ -373,8 +426,15 @@ public static class FrameCodec
                 for (var trim = 0; trim < maxTrim; trim++)
                 {
                     var tryLen = remainLen - trim;
-                    if (tryLen < fecRepeat * 4) break;
-                    if (tryLen % fecRepeat != 0) continue;
+                    if (tryLen < fecRepeat * 4)
+                    {
+                        break;
+                    }
+
+                    if (tryLen % fecRepeat != 0)
+                    {
+                        continue;
+                    }
 
                     var fecSoft = new double[tryLen];
                     Array.Copy(softBits, dataStart, fecSoft, 0, tryLen);
@@ -383,7 +443,10 @@ public static class FrameCodec
                     var corrected = Fec.DecodeSoft(deinterleaved, fecRepeat);
 
                     var result = TryDecodeData(corrected, password);
-                    if (result != null) return result;
+                    if (result != null)
+                    {
+                        return result;
+                    }
                 }
 
                 // Truncation recovery (soft-decision variant)
@@ -391,8 +454,15 @@ public static class FrameCodec
                 {
                     var origDataBits = (assumedPayload + 4) * 8;
                     var origFecLen = origDataBits * fecRepeat;
-                    if (origFecLen <= remainLen) continue;
-                    if (origFecLen > remainLen * 3) break;
+                    if (origFecLen <= remainLen)
+                    {
+                        continue;
+                    }
+
+                    if (origFecLen > remainLen * 3)
+                    {
+                        break;
+                    }
 
                     var padded = new double[origFecLen];
                     Array.Copy(softBits, dataStart, padded, 0, Math.Min(remainLen, origFecLen));
@@ -436,7 +506,10 @@ public static class FrameCodec
                     }
                 }
             }
-            if (match) return i;
+            if (match)
+            {
+                return i;
+            }
         }
         return -1;
     }

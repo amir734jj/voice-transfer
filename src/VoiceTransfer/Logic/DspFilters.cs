@@ -43,7 +43,10 @@ public static class DspFilters
     /// </summary>
     public static void RemoveDc(float[] samples)
     {
-        if (samples.Length == 0) return;
+        if (samples.Length == 0)
+        {
+            return;
+        }
 
         double sum = 0;
         for (var i = 0; i < samples.Length; i++)
@@ -60,16 +63,25 @@ public static class DspFilters
     /// </summary>
     public static void Normalize(float[] samples)
     {
-        if (samples.Length == 0) return;
+        if (samples.Length == 0)
+        {
+            return;
+        }
 
         var peak = 0f;
         for (var i = 0; i < samples.Length; i++)
         {
             var abs = Math.Abs(samples[i]);
-            if (abs > peak) peak = abs;
+            if (abs > peak)
+            {
+                peak = abs;
+            }
         }
 
-        if (peak < 1e-10f) return; // silence -- don't amplify noise floor
+        if (peak < 1e-10f)
+        {
+            return; // silence -- don't amplify noise floor
+        }
 
         var scale = 1f / peak;
         for (var i = 0; i < samples.Length; i++)
@@ -87,7 +99,10 @@ public static class DspFilters
     /// </summary>
     public static void BandpassFilter(float[] samples, double lowCutoff, double highCutoff, int sampleRate)
     {
-        if (samples.Length < 4) return;
+        if (samples.Length < 4)
+        {
+            return;
+        }
 
         // Clamp to valid range
         lowCutoff = Math.Max(20, lowCutoff);

@@ -1,4 +1,6 @@
+using global::NAudio.CoreAudioApi;
 using global::NAudio.Wave;
+using Serilog;
 using VoiceTransfer.Data;
 using VoiceTransfer.Interfaces;
 
@@ -13,16 +15,20 @@ internal sealed class NAudioLoopbackRecorder : IAudioRecorder
 
     public NAudioLoopbackRecorder()
     {
-        _capture = new WasapiLoopbackCapture();
+        var enumerator = new MMDeviceEnumerator();
+        var device = enumerator.GetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia);
+        Log.Information("WASAPI loopback device: {Name}", device.FriendlyName);
+
+        _capture = new WasapiLoopbackCapture(device);
         _sourceRate = _capture.WaveFormat.SampleRate;
         _sourceChannels = _capture.WaveFormat.Channels;
 
+        Log.Information("WASAPI loopback format: {Rate}Hz, {Ch}ch, {Enc}",
+            _sourceRate, _sourceChannels, _capture.WaveFormat.Encoding);
+
         _capture.DataAvailable += (_, e) =>
         {
-            if (e.BytesRecorded == 0)
-            {
-                return;
-            }
+            if (e.BytesRecorded == 0) return;
 
             var floats = new float[e.BytesRecorded / 4];
             Buffer.BlockCopy(e.Buffer, 0, floats, 0, e.BytesRecorded);

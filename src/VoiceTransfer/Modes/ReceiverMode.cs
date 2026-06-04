@@ -127,13 +127,22 @@ public static class ReceiverMode
                 for (var nudge = -profile.SamplesPerBit / 2; nudge <= profile.SamplesPerBit / 2; nudge += profile.SamplesPerBit / 4)
                 {
                     var sampleOffset = alignedStart + nudge;
-                    if (sampleOffset < 0) continue;
+                    if (sampleOffset < 0)
+                    {
+                        continue;
+                    }
 
                     var dataStartSample = sampleOffset + expectedDataBit * profile.SamplesPerBit;
-                    if (dataStartSample >= samples.Length) continue;
+                    if (dataStartSample >= samples.Length)
+                    {
+                        continue;
+                    }
 
                     var (bits, _) = demod.DemodulateAll(samples, sampleOffset);
-                    if (expectedDataBit >= bits.Length) continue;
+                    if (expectedDataBit >= bits.Length)
+                    {
+                        continue;
+                    }
 
                     var result = FrameCodec.DecodeFromPosition(bits, expectedDataBit, profile.FecRepeat, password);
                     if (result != null)
@@ -145,7 +154,10 @@ public static class ReceiverMode
 
                     // Also try soft decode
                     var softBits = demod.DemodulateAllSoft(samples, sampleOffset);
-                    if (expectedDataBit >= softBits.Length) continue;
+                    if (expectedDataBit >= softBits.Length)
+                    {
+                        continue;
+                    }
 
                     result = FrameCodec.DecodeFromPositionSoft(softBits, expectedDataBit, profile.FecRepeat, password);
                     if (result != null)
@@ -269,7 +281,10 @@ public static class ReceiverMode
         if (bits.Length >= 16)
         {
             var result = FrameCodec.Decode(bits, fecRepeat, password);
-            if (result != null) return result;
+            if (result != null)
+            {
+                return result;
+            }
         }
 
         return null;
@@ -282,7 +297,10 @@ public static class ReceiverMode
     private static byte[]? TryDemodulateSoft(float[] samples, int startOffset, FskDemodulator demod, int fecRepeat, string? password)
     {
         var softBits = demod.DemodulateAllSoft(samples, startOffset);
-        if (softBits.Length < 16) return null;
+        if (softBits.Length < 16)
+        {
+            return null;
+        }
 
         return FrameCodec.DecodeSoft(softBits, fecRepeat, password);
     }
@@ -309,7 +327,11 @@ public static class ReceiverMode
         for (var i = 0; i < numBlocks; i++)
         {
             var offset = i * blockSize;
-            if (offset + blockSize > samples.Length) break;
+            if (offset + blockSize > samples.Length)
+            {
+                break;
+            }
+
             var mp = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqMark);
             var sp = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqSpace);
             blockPowers[i] = mp + sp;
@@ -374,13 +396,23 @@ public static class ReceiverMode
             for (var b = 0; b < blocksInChunk; b++)
             {
                 var offset = chunkStart + b * blockSize;
-                if (offset + blockSize > samples.Length) break;
+                if (offset + blockSize > samples.Length)
+                {
+                    break;
+                }
 
                 var markPower = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqMark);
                 var spacePower = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqSpace);
 
-                if (markPower > maxMark) maxMark = markPower;
-                if (spacePower > maxSpace) maxSpace = spacePower;
+                if (markPower > maxMark)
+                {
+                    maxMark = markPower;
+                }
+
+                if (spacePower > maxSpace)
+                {
+                    maxSpace = spacePower;
+                }
 
                 var maxP = Math.Max(markPower, spacePower);
                 var minP = Math.Min(markPower, spacePower);

@@ -75,11 +75,18 @@ public class FskDemodulator(TransmissionProfile profile)
         var guardSamples = (int)(length * profile.GuardFraction);
         var analysisOffset = offset + guardSamples;
         var analysisLength = length - 2 * guardSamples;
-        if (analysisLength < 16) analysisLength = length; // safety: use full period if too short
+        if (analysisLength < 16)
+        {
+            analysisLength = length; // safety: use full period if too short
+        }
+
         if (analysisOffset + analysisLength > samples.Length)
         {
             analysisLength = samples.Length - analysisOffset;
-            if (analysisLength < 16) return (false, false);
+            if (analysisLength < 16)
+            {
+                return (false, false);
+            }
         }
 
         var rawMark = GoertzelPower(samples, analysisOffset, analysisLength, profile.FreqMark);
@@ -155,7 +162,10 @@ public class FskDemodulator(TransmissionProfile profile)
         for (var i = 0; i < numBlocks; i++)
         {
             var offset = signalStart + i * blockSize + calGuardSamples;
-            if (offset + analysisLen > samples.Length) break;
+            if (offset + analysisLen > samples.Length)
+            {
+                break;
+            }
 
             _blockMarkPower[i] = GoertzelPower(samples, offset, analysisLen, profile.FreqMark);
             _blockSpacePower[i] = GoertzelPower(samples, offset, analysisLen, profile.FreqSpace);
@@ -298,11 +308,18 @@ public class FskDemodulator(TransmissionProfile profile)
         var guardSamples = (int)(length * profile.GuardFraction);
         var analysisOffset = offset + guardSamples;
         var analysisLength = length - 2 * guardSamples;
-        if (analysisLength < 16) analysisLength = length;
+        if (analysisLength < 16)
+        {
+            analysisLength = length;
+        }
+
         if (analysisOffset + analysisLength > samples.Length)
         {
             analysisLength = samples.Length - analysisOffset;
-            if (analysisLength < 16) return 0;
+            if (analysisLength < 16)
+            {
+                return 0;
+            }
         }
 
         var rawMark = GoertzelPower(samples, analysisOffset, analysisLength, profile.FreqMark);
@@ -324,9 +341,20 @@ public class FskDemodulator(TransmissionProfile profile)
         var spacePower = rawSpace * sg;
 
         // Return LLR: log(markPower / spacePower), clamped to avoid extremes
-        if (markPower < 1e-15 && spacePower < 1e-15) return 0;
-        if (spacePower < 1e-15) return 10.0; // very confident mark
-        if (markPower < 1e-15) return -10.0; // very confident space
+        if (markPower < 1e-15 && spacePower < 1e-15)
+        {
+            return 0;
+        }
+
+        if (spacePower < 1e-15)
+        {
+            return 10.0; // very confident mark
+        }
+
+        if (markPower < 1e-15)
+        {
+            return -10.0; // very confident space
+        }
 
         var llr = Math.Log(markPower / spacePower);
         return Math.Clamp(llr, -10.0, 10.0);
@@ -350,10 +378,16 @@ public class FskDemodulator(TransmissionProfile profile)
         for (var step = 0; step < maxCoarseSteps; step++)
         {
             var offset = searchStart + step * blockSize;
-            if (offset + blockSize * 6 > samples.Length) break;
+            if (offset + blockSize * 6 > samples.Length)
+            {
+                break;
+            }
 
             var numTestBits = Math.Min(32, (samples.Length - offset) / blockSize);
-            if (numTestBits < 6) continue;
+            if (numTestBits < 6)
+            {
+                continue;
+            }
 
             var score = ScoreAlternation(samples, offset, blockSize, numTestBits);
             if (score > bestCoarseScore)
@@ -370,10 +404,16 @@ public class FskDemodulator(TransmissionProfile profile)
         for (var tryOffset = -blockSize; tryOffset < blockSize; tryOffset++)
         {
             var offset = bestCoarseOffset + tryOffset;
-            if (offset < 0 || offset + blockSize * 6 > samples.Length) continue;
+            if (offset < 0 || offset + blockSize * 6 > samples.Length)
+            {
+                continue;
+            }
 
             var numTestBits = Math.Min(32, (samples.Length - offset) / blockSize);
-            if (numTestBits < 6) continue;
+            if (numTestBits < 6)
+            {
+                continue;
+            }
 
             var score = ScoreAlternation(samples, offset, blockSize, numTestBits);
             if (score > bestScore)
@@ -398,12 +438,16 @@ public class FskDemodulator(TransmissionProfile profile)
             {
                 score += 1.0;
                 if (prevBit.HasValue && bit != prevBit.Value)
+                {
                     score += 2.0;
+                }
             }
             else
             {
                 if (prevBit.HasValue && bit != prevBit.Value)
+                {
                     score += 0.5;
+                }
             }
             prevBit = bit;
         }

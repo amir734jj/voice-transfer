@@ -9,6 +9,7 @@
     <SelfContained>true</SelfContained>
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>partial</TrimMode>
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <Version>1.0.0</Version>
   </PropertyGroup>
