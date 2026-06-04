@@ -9,7 +9,7 @@ namespace VoiceTransfer.Audio;
 public static class DeviceResolver
 {
     private static readonly string[] VirtualDevicePrefixes =
-        ["Voicemeeter", "CABLE", "VB-Audio", "Virtual"];
+        ["Voicemeeter", "CABLE", "VB-Audio", "Virtual", "Monitor of", "Null Output"];
 
     /// <summary>
     /// Resolves an input device index. When -1, picks the first non-virtual device.
@@ -29,7 +29,7 @@ public static class DeviceResolver
             }
         }
 
-        // No hardware device found — fall back to 0
+        // No hardware device found -- fall back to 0
         if (names.Count > 0)
             Log.Warning("No hardware input device found, using device [0] {Name}", names[0]);
         return 0;

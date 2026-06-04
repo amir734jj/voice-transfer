@@ -18,7 +18,7 @@ public sealed class NAudioBackend : IAudioBackend
         }
         catch (NotSupportedException)
         {
-            // COM disabled (trimmed build) — fall back to WaveIn API
+            // COM disabled (trimmed build) -- fall back to WaveIn API
             var names = new List<string>();
             for (var i = 0; i < WaveInEvent.DeviceCount; i++)
                 names.Add(WaveInEvent.GetCapabilities(i).ProductName);
@@ -38,7 +38,7 @@ public sealed class NAudioBackend : IAudioBackend
         }
         catch (NotSupportedException)
         {
-            // COM disabled (trimmed build) — WaveOutEvent doesn't expose device enumeration,
+            // COM disabled (trimmed build) -- WaveOutEvent doesn't expose device enumeration,
             // so use P/Invoke to waveOutGetNumDevs/waveOutGetDevCaps
             var count = waveOutGetNumDevs();
             var names = new List<string>(count);
