@@ -31,6 +31,13 @@ public class TransmissionProfile
     public double Amplitude { get; init; } = 0.12;
 
     /// <summary>
+    /// Stealth noise level as a fraction of amplitude [0-1].
+    /// 0 = no added noise (maximum clarity for over-the-air).
+    /// 0.35 = default stealth shaping (sounds like line static).
+    /// </summary>
+    public double StealthNoise { get; init; } = 0.35;
+
+    /// <summary>
     /// Minimum Goertzel power to consider a signal present.
     /// </summary>
     public double SignalThreshold { get; init; } = 0.0001;
@@ -97,12 +104,32 @@ public class TransmissionProfile
         FreqSpace = 1800.0, // 400 Hz separation
     };
 
+    /// <summary>
+    /// Robust preset: designed for over-the-air (speaker → microphone) transmission.
+    /// Wide frequency separation (1000 Hz), slow baud rate for narrow Goertzel bins,
+    /// strong FEC, high amplitude, long preamble, no stealth noise.
+    /// Goertzel bin width at 100 baud = 100 Hz, vs 1000 Hz separation → no overlap.
+    /// </summary>
+    private static TransmissionProfile Robust => new()
+    {
+        BaudRate = 100,
+        PreambleBits = 256,
+        Amplitude = 0.5,
+        SignalThreshold = 0.00005,
+        DecisionRatio = 1.2,
+        FecRepeat = 5,
+        FreqMark = 2500.0,
+        FreqSpace = 1500.0, // 1000 Hz separation for maximum discrimination
+        StealthNoise = 0.0,  // no added noise -- clarity over stealth
+    };
+
     private static TransmissionProfile FromPreset(string name) => name.ToLowerInvariant() switch
     {
         "slow" => Slow,
         "normal" => Normal,
         "fast" => Fast,
-        _ => throw new ArgumentException($"Unknown preset '{name}'. Valid: slow, normal, fast.")
+        "robust" => Robust,
+        _ => throw new ArgumentException($"Unknown preset '{name}'. Valid: slow, normal, fast, robust.")
     };
 
     /// <summary>

@@ -27,17 +27,17 @@ public static class StealthShaper
         var result = new float[fskSamples.Length];
         var rng = new Random(12345); // deterministic seed for reproducibility
 
-        // Noise level relative to signal -- enough to mask but not overwhelm
-        var noiseLevel = profile.Amplitude * 0.35;
+        // Noise level relative to signal -- controlled by profile
+        var noiseLevel = profile.Amplitude * profile.StealthNoise;
 
         // Pink noise state (1/f noise via Voss-McCartney algorithm -- 3 octaves)
         var pinkState = new double[3];
         var pinkCounter = 0;
 
-        // Amplitude wobble: slow LFO at ~2-4 Hz
+        // Amplitude wobble: slow LFO at ~2-4 Hz (scaled with stealth level)
         double wobblePhase = 0;
         var wobbleFreq = 2.7; // Hz -- irregular-sounding frequency
-        var wobbleDepth = 0.15; // +/-15% amplitude variation
+        var wobbleDepth = 0.15 * Math.Min(1.0, profile.StealthNoise / 0.35); // scale with stealth
 
         // Global envelope: 200ms fade in/out
         var fadeLen = (int)(0.2 * Constants.SampleRate);

@@ -45,6 +45,12 @@ public static class ReceiverMode
         Log.Information("Processing {Samples} samples ({Duration:F1}s)...",
             samples.Length, (double)samples.Length / Constants.SampleRate);
 
+        // Preprocess: DC removal -> bandpass filter -> normalization
+        // Critical for over-the-air reception where room noise, mic coloring,
+        // and variable gain would otherwise corrupt Goertzel power estimates.
+        Log.Information("Preprocessing: DC removal, bandpass filter, normalization...");
+        samples = DspFilters.Preprocess(samples, profile);
+
         // Demodulate
         var decoded = DemodulateAndDecode(samples, profile, password);
 

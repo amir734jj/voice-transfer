@@ -140,7 +140,10 @@ public static class InteractiveReceiver
                     LogPeakPower(snapshot, profile);
                 }
 
-                var decoded = ReceiverMode.DemodulateAndDecode(snapshot, profile, password);
+                // Preprocess: bandpass + normalize for over-the-air robustness
+                var processed = DspFilters.Preprocess(snapshot, profile);
+
+                var decoded = ReceiverMode.DemodulateAndDecode(processed, profile, password);
                 if (decoded != null)
                 {
                     messageCount++;
