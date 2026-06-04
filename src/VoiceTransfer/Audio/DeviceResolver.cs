@@ -17,7 +17,9 @@ public static class DeviceResolver
     public static int ResolveInput(IAudioBackend audio, int requestedIndex)
     {
         if (requestedIndex >= 0)
+        {
             return requestedIndex;
+        }
 
         var names = audio.GetInputDeviceNames();
         for (var i = 0; i < names.Count; i++)
@@ -31,7 +33,10 @@ public static class DeviceResolver
 
         // No hardware device found -- fall back to 0
         if (names.Count > 0)
+        {
             Log.Warning("No hardware input device found, using device [0] {Name}", names[0]);
+        }
+
         return 0;
     }
 
@@ -41,7 +46,9 @@ public static class DeviceResolver
     public static int ResolveOutput(IAudioBackend audio, int requestedIndex)
     {
         if (requestedIndex >= 0)
+        {
             return requestedIndex;
+        }
 
         var names = audio.GetOutputDeviceNames();
         for (var i = 0; i < names.Count; i++)
@@ -54,7 +61,10 @@ public static class DeviceResolver
         }
 
         if (names.Count > 0)
+        {
             Log.Warning("No hardware output device found, using device [0] {Name}", names[0]);
+        }
+
         return 0;
     }
 

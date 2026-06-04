@@ -46,9 +46,13 @@ public sealed class NAudioBackend : IAudioBackend
             {
                 var caps = new WaveOutCapsW();
                 if (waveOutGetDevCapsW(i, ref caps, WaveOutCapsW.Size) == 0)
+                {
                     names.Add(caps.szPname);
+                }
                 else
+                {
                     names.Add($"Output Device {i}");
+                }
             }
             return names;
         }
