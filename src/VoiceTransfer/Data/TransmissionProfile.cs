@@ -10,6 +10,7 @@ namespace VoiceTransfer.Data;
 ///   slow   -- 150 baud, 256-bit preamble, 5x FEC, 1600/2400 Hz (800 Hz separation). Most resilient to noise.
 ///   normal -- 300 baud, 128-bit preamble, 3x FEC, 1800/2200 Hz (400 Hz separation). Good balance (default).
 ///   fast   -- 350 baud, 64-bit preamble,  1x FEC, 1800/2200 Hz (400 Hz separation). Faster but needs cleaner signal.
+///   robust -- 100 baud, 256-bit preamble, 5x FEC, 1500/2500 Hz (1000 Hz separation). Designed for over-the-air (speaker-to-mic).
 /// </summary>
 public class TransmissionProfile
 {
