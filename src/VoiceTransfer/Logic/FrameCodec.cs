@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Serilog;
 using VoiceTransfer.Data;
 
 namespace VoiceTransfer.Logic;
@@ -98,6 +99,7 @@ public static class FrameCodec
         var syncPattern = ByteToBits(Constants.SyncByte);
         var searchFrom = 0;
         const int maxSyncAttempts = 10;
+        var syncFoundCount = 0;
 
         for (var attempt = 0; attempt < maxSyncAttempts; attempt++)
         {
@@ -107,6 +109,7 @@ public static class FrameCodec
                 break;
             }
 
+            syncFoundCount++;
             // Data starts after the 8-bit sync byte
             var dataStart = syncPos + 8;
             if (dataStart >= bits.Length)
@@ -119,6 +122,9 @@ public static class FrameCodec
             // The de-interleaver requires exact block dimensions, so we try
             // progressively shorter lengths until CRC validates.
             var remainLen = bits.Length - dataStart;
+
+            Log.Debug("Sync byte found at bit {Pos}, {Remain} data bits remaining (attempt {Attempt})",
+                    syncPos, remainLen, attempt);
 
             if (fecRepeat <= 1)
             {
@@ -135,6 +141,7 @@ public static class FrameCodec
             {
                 // With FEC: try different trimming amounts to find correct block boundary
                 var maxTrim = Math.Min(remainLen, fecRepeat * 100);
+                var trimsAttempted = 0;
                 for (var trim = 0; trim < maxTrim; trim++)
                 {
                     var tryLen = remainLen - trim;
@@ -148,6 +155,7 @@ public static class FrameCodec
                         continue; // must be divisible by repeat factor
                     }
 
+                    trimsAttempted++;
                     var fecBits = new bool[tryLen];
                     Array.Copy(bits, dataStart, fecBits, 0, tryLen);
 
@@ -160,13 +168,277 @@ public static class FrameCodec
                         return result;
                     }
                 }
+
+
+                // Truncation recovery: when the recording is shorter than the
+                // original transmission, the de-interleave dimensions are wrong.
+                // The interleaver used (origCols × fecRepeat) but we only have
+                // remainLen bits. Try different assumed original payload sizes,
+                // pad to the correct length, and de-interleave with the right
+                // dimensions. This recovers data even when 40% of the signal
+                // is missing (FEC provides enough redundancy).
+                for (var assumedPayload = 1; assumedPayload <= 200; assumedPayload++)
+                {
+                    var origDataBits = (assumedPayload + 4) * 8; // len(2) + payload + crc(2)
+                    var origFecLen = origDataBits * fecRepeat;
+                    if (origFecLen <= remainLen)
+                    {
+                        continue; // not truncated -- was already handled by trim loop
+                    }
+
+                    if (origFecLen > remainLen * 3)
+                    {
+                        break; // need at least ~1/3 of the FEC data
+                    }
+
+                    // Pad received bits to assumed original length
+                    // Padding zeros act as "erasures" -- they're wrong for bit=1
+                    // but with 3+ correct copies, majority voting still works
+                    var padded = new bool[origFecLen];
+                    Array.Copy(bits, dataStart, padded, 0, Math.Min(remainLen, origFecLen));
+
+                    var deinterleaved = Fec.Deinterleave(padded, fecRepeat);
+                    var corrected = Fec.Decode(deinterleaved, fecRepeat);
+
+                    var result = TryDecodeData(corrected, password);
+                    if (result != null)
+                    {
+                        Log.Information("Truncation recovery: payload={Payload} bytes, padded {Avail}->{Orig} FEC bits",
+                            assumedPayload, remainLen, origFecLen);
+                        return result;
+                    }
+                }
             }
 
             // Try next sync position
             searchFrom = syncPos + 1;
         }
 
+        if (syncFoundCount > 0)
+            Log.Information("Found {Count} sync byte(s) but none decoded successfully", syncFoundCount);
+
         return null;
+    }
+
+    /// <summary>
+    /// Try decoding FEC data starting at a specific bit position, bypassing
+    /// sync byte search. Used when the sync byte is corrupted by reverb but
+    /// the data start position is known from preamble detection.
+    /// </summary>
+    public static byte[]? DecodeFromPosition(bool[] bits, int dataStart, int fecRepeat, string? password = null)
+    {
+        if (dataStart >= bits.Length) return null;
+        var remainLen = bits.Length - dataStart;
+
+        if (fecRepeat <= 1)
+        {
+            var fecBits = new bool[remainLen];
+            Array.Copy(bits, dataStart, fecBits, 0, remainLen);
+            return TryDecodeData(fecBits, password);
+        }
+
+        // Trim loop (same as Decode)
+        var maxTrim = Math.Min(remainLen, fecRepeat * 100);
+        for (var trim = 0; trim < maxTrim; trim++)
+        {
+            var tryLen = remainLen - trim;
+            if (tryLen < fecRepeat * 4) break;
+            if (tryLen % fecRepeat != 0) continue;
+
+            var fecBits = new bool[tryLen];
+            Array.Copy(bits, dataStart, fecBits, 0, tryLen);
+            var deinterleaved = Fec.Deinterleave(fecBits, fecRepeat);
+            var corrected = Fec.Decode(deinterleaved, fecRepeat);
+            var result = TryDecodeData(corrected, password);
+            if (result != null) return result;
+        }
+
+        // Truncation recovery
+        for (var assumedPayload = 1; assumedPayload <= 200; assumedPayload++)
+        {
+            var origFecLen = (assumedPayload + 4) * 8 * fecRepeat;
+            if (origFecLen <= remainLen) continue;
+            if (origFecLen > remainLen * 3) break;
+
+            var padded = new bool[origFecLen];
+            Array.Copy(bits, dataStart, padded, 0, Math.Min(remainLen, origFecLen));
+            var deinterleaved = Fec.Deinterleave(padded, fecRepeat);
+            var corrected = Fec.Decode(deinterleaved, fecRepeat);
+            var result = TryDecodeData(corrected, password);
+            if (result != null) return result;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Soft-decision variant of DecodeFromPosition.
+    /// </summary>
+    public static byte[]? DecodeFromPositionSoft(double[] softBits, int dataStart, int fecRepeat, string? password = null)
+    {
+        if (dataStart >= softBits.Length) return null;
+        var remainLen = softBits.Length - dataStart;
+
+        if (fecRepeat <= 1)
+        {
+            var corrected = new bool[remainLen];
+            for (var i = 0; i < remainLen; i++)
+                corrected[i] = softBits[dataStart + i] > 0;
+            return TryDecodeData(corrected, password);
+        }
+
+        var maxTrim = Math.Min(remainLen, fecRepeat * 100);
+        for (var trim = 0; trim < maxTrim; trim++)
+        {
+            var tryLen = remainLen - trim;
+            if (tryLen < fecRepeat * 4) break;
+            if (tryLen % fecRepeat != 0) continue;
+
+            var fecSoft = new double[tryLen];
+            Array.Copy(softBits, dataStart, fecSoft, 0, tryLen);
+            var deinterleaved = Fec.DeinterleaveSoft(fecSoft, fecRepeat);
+            var corrected = Fec.DecodeSoft(deinterleaved, fecRepeat);
+            var result = TryDecodeData(corrected, password);
+            if (result != null) return result;
+        }
+
+        // Truncation recovery (soft)
+        for (var assumedPayload = 1; assumedPayload <= 200; assumedPayload++)
+        {
+            var origFecLen = (assumedPayload + 4) * 8 * fecRepeat;
+            if (origFecLen <= remainLen) continue;
+            if (origFecLen > remainLen * 3) break;
+
+            var padded = new double[origFecLen];
+            Array.Copy(softBits, dataStart, padded, 0, Math.Min(remainLen, origFecLen));
+            var deinterleaved = Fec.DeinterleaveSoft(padded, fecRepeat);
+            var corrected = Fec.DecodeSoft(deinterleaved, fecRepeat);
+            var result = TryDecodeData(corrected, password);
+            if (result != null) return result;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Soft-decision decode: uses log-likelihood ratios instead of hard bits.
+    /// Much more robust for over-the-air reception where bit confidence varies.
+    /// The sync byte is still found using hard decisions (derived from LLR sign).
+    /// </summary>
+    public static byte[]? DecodeSoft(double[] softBits, int fecRepeat, string? password = null)
+    {
+        // Derive hard bits for sync byte search
+        var hardBits = new bool[softBits.Length];
+        for (var i = 0; i < softBits.Length; i++)
+            hardBits[i] = softBits[i] > 0;
+
+        var syncPattern = ByteToBits(Constants.SyncByte);
+        var searchFrom = 0;
+        const int maxSyncAttempts = 10;
+
+        for (var attempt = 0; attempt < maxSyncAttempts; attempt++)
+        {
+            // Also search with 1-bit error tolerance for the sync byte
+            var syncPos = FindPattern(hardBits, syncPattern, searchFrom);
+            if (syncPos < 0)
+            {
+                // Try fuzzy sync search (allow 1 bit error)
+                syncPos = FindPatternFuzzy(hardBits, syncPattern, searchFrom, 1);
+            }
+            if (syncPos < 0)
+            {
+                break;
+            }
+
+            var dataStart = syncPos + 8;
+            if (dataStart >= softBits.Length)
+            {
+                break;
+            }
+
+            var remainLen = softBits.Length - dataStart;
+
+            if (fecRepeat <= 1)
+            {
+                // No FEC: hard-decision from LLR
+                var corrected = new bool[remainLen];
+                for (var i = 0; i < remainLen; i++)
+                    corrected[i] = softBits[dataStart + i] > 0;
+                var result = TryDecodeData(corrected, password);
+                if (result != null) return result;
+            }
+            else
+            {
+                var maxTrim = Math.Min(remainLen, fecRepeat * 100);
+                for (var trim = 0; trim < maxTrim; trim++)
+                {
+                    var tryLen = remainLen - trim;
+                    if (tryLen < fecRepeat * 4) break;
+                    if (tryLen % fecRepeat != 0) continue;
+
+                    var fecSoft = new double[tryLen];
+                    Array.Copy(softBits, dataStart, fecSoft, 0, tryLen);
+
+                    var deinterleaved = Fec.DeinterleaveSoft(fecSoft, fecRepeat);
+                    var corrected = Fec.DecodeSoft(deinterleaved, fecRepeat);
+
+                    var result = TryDecodeData(corrected, password);
+                    if (result != null) return result;
+                }
+
+                // Truncation recovery (soft-decision variant)
+                for (var assumedPayload = 1; assumedPayload <= 200; assumedPayload++)
+                {
+                    var origDataBits = (assumedPayload + 4) * 8;
+                    var origFecLen = origDataBits * fecRepeat;
+                    if (origFecLen <= remainLen) continue;
+                    if (origFecLen > remainLen * 3) break;
+
+                    var padded = new double[origFecLen];
+                    Array.Copy(softBits, dataStart, padded, 0, Math.Min(remainLen, origFecLen));
+
+                    var deinterleaved = Fec.DeinterleaveSoft(padded, fecRepeat);
+                    var corrected = Fec.DecodeSoft(deinterleaved, fecRepeat);
+
+                    var result = TryDecodeData(corrected, password);
+                    if (result != null)
+                    {
+                        Log.Information("Truncation recovery (soft): payload={Payload} bytes", assumedPayload);
+                        return result;
+                    }
+                }
+            }
+
+            searchFrom = syncPos + 1;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Find a pattern allowing up to maxErrors mismatches.
+    /// </summary>
+    private static int FindPatternFuzzy(bool[] bits, bool[] pattern, int startFrom, int maxErrors)
+    {
+        for (var i = startFrom; i <= bits.Length - pattern.Length; i++)
+        {
+            var errors = 0;
+            var match = true;
+            for (var j = 0; j < pattern.Length; j++)
+            {
+                if (bits[i + j] != pattern[j])
+                {
+                    errors++;
+                    if (errors > maxErrors)
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+            }
+            if (match) return i;
+        }
+        return -1;
     }
 
     /// <summary>

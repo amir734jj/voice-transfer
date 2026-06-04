@@ -37,6 +37,9 @@ internal abstract class ProfileOptions
     [Option("freq-space", HelpText = "FSK space frequency in Hz (bit=0, default 1800). Sender & receiver must match.")]
     public double? FreqSpace { get; set; }
 
+    [Option("guard", HelpText = "Guard interval fraction (0.0-0.45). Skips edges of each bit period to reduce ISI. Sender & receiver need NOT match.")]
+    public double? GuardFraction { get; set; }
+
     [Option("password", HelpText = "Encryption password (AES-256-GCM). Must match on sender & receiver. Omit for no encryption.")]
     public string? Password { get; set; }
 
@@ -46,5 +49,5 @@ internal abstract class ProfileOptions
     public TransmissionProfile BuildProfile() =>
         TransmissionProfile.FromOptions(Preset, BaudRate, PreambleBits,
             Amplitude, SignalThreshold, DecisionRatio, FecRepeat,
-            FreqMark, FreqSpace);
+            FreqMark, FreqSpace, GuardFraction);
 }

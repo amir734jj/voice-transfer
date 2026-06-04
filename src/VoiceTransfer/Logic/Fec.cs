@@ -135,4 +135,72 @@ public static class Fec
 
         return deinterleaved;
     }
+
+    /// <summary>
+    /// Soft-decision decode using log-likelihood ratios.
+    /// Instead of hard majority voting, sums the LLR values for each group.
+    /// This is significantly more powerful: a single high-confidence correct bit
+    /// can outweigh several low-confidence wrong bits.
+    /// 
+    /// Input: soft values where positive = mark (1), negative = space (0),
+    ///        magnitude = confidence.
+    /// Output: hard bits after soft decision.
+    /// </summary>
+    public static bool[] DecodeSoft(double[] softBits, int repeatFactor)
+    {
+        if (repeatFactor <= 1)
+        {
+            var bits = new bool[softBits.Length];
+            for (var i = 0; i < softBits.Length; i++)
+                bits[i] = softBits[i] > 0;
+            return bits;
+        }
+
+        var dataLen = softBits.Length / repeatFactor;
+        var decoded = new bool[dataLen];
+
+        for (var i = 0; i < dataLen; i++)
+        {
+            var llrSum = 0.0;
+            for (var r = 0; r < repeatFactor; r++)
+            {
+                llrSum += softBits[i * repeatFactor + r];
+            }
+            // Positive sum → mark (1), negative → space (0)
+            decoded[i] = llrSum > 0;
+        }
+
+        return decoded;
+    }
+
+    /// <summary>
+    /// De-interleave soft-decision values (inverse of Interleave, for doubles).
+    /// </summary>
+    public static double[] DeinterleaveSoft(double[] softBits, int repeatFactor)
+    {
+        if (repeatFactor <= 1)
+        {
+            return softBits;
+        }
+
+        var blockSize = repeatFactor;
+        var numBlocks = softBits.Length / blockSize;
+
+        var deinterleaved = new double[softBits.Length];
+        for (var col = 0; col < blockSize; col++)
+        {
+            for (var row = 0; row < numBlocks; row++)
+            {
+                deinterleaved[row * blockSize + col] = softBits[col * numBlocks + row];
+            }
+        }
+
+        // Copy remainder as-is
+        for (var i = numBlocks * blockSize; i < softBits.Length; i++)
+        {
+            deinterleaved[i] = softBits[i];
+        }
+
+        return deinterleaved;
+    }
 }

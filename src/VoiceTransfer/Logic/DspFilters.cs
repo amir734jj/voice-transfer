@@ -25,10 +25,10 @@ public static class DspFilters
 
         RemoveDc(result);
 
-        // Bandpass: keep only the FSK frequency band with generous margin
+        // Bandpass: keep only the FSK frequency band with margin proportional to separation
         var freqLow = Math.Min(profile.FreqMark, profile.FreqSpace);
         var freqHigh = Math.Max(profile.FreqMark, profile.FreqSpace);
-        var margin = (freqHigh - freqLow); // margin = frequency separation
+        var margin = (freqHigh - freqLow) * 0.5; // half the separation as margin
         BandpassFilter(result, freqLow - margin, freqHigh + margin, Constants.SampleRate);
 
         Normalize(result);

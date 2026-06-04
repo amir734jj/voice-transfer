@@ -621,3 +621,12 @@ fabric.properties
 !.idea/runConfigurations
 
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains+all,dotnetcore,aspnetcore,csharp
+
+# Test artifacts
+*.mp4
+*.wav
+*.m4a
+*.ogg
+*.png
+test-*.txt
+test-*.wav

@@ -51,6 +51,9 @@ public static class ReceiverMode
         Log.Information("Preprocessing: DC removal, bandpass filter, normalization...");
         samples = DspFilters.Preprocess(samples, profile);
 
+        // Diagnostic: show Goertzel power at FSK frequencies across the recording
+        LogSignalDiagnostics(samples, profile);
+
         // Demodulate
         var decoded = DemodulateAndDecode(samples, profile, password);
 
@@ -82,17 +85,21 @@ public static class ReceiverMode
         var signalStart = FindSignalStart(samples, profile);
         if (signalStart >= 0)
         {
-            Log.Debug("Signal detected at sample {Start} ({Time:F3}s)",
+            Log.Information("Signal detected at sample {Start} ({Time:F3}s)",
                 signalStart, (double)signalStart / Constants.SampleRate);
+
+            // Calibrate frequency gain to compensate for uneven speaker/mic/codec response
+            Log.Debug("Calibrating frequency gain...");
+            demod.CalibrateFromSignal(samples, signalStart, samples.Length);
 
             // Find best bit alignment using preamble correlation
             Log.Debug("Step 2: Bit synchronization via preamble...");
             var searchLen = Math.Min(profile.PreambleBits * profile.SamplesPerBit * 2, samples.Length - signalStart);
             var alignedStart = demod.FindBestAlignment(samples, signalStart, searchLen);
 
-            Log.Debug("Aligned to sample {Start}", alignedStart);
+            Log.Debug("Aligned to sample {Start} ({Time:F3}s)", alignedStart, (double)alignedStart / Constants.SampleRate);
 
-            // Try the best alignment and a few nearby offsets
+            // Try the best alignment and a few nearby offsets (hard + soft)
             for (var nudge = -profile.SamplesPerBit / 2; nudge <= profile.SamplesPerBit / 2; nudge += profile.SamplesPerBit / 8)
             {
                 var tryStart = alignedStart + nudge;
@@ -101,11 +108,52 @@ public static class ReceiverMode
                     continue;
                 }
 
-                var result = TryDemodulate(samples, tryStart, demod, profile.FecRepeat, password);
+                var result = TryDemodulate(samples, tryStart, demod, profile.FecRepeat, password)
+                          ?? TryDemodulateSoft(samples, tryStart, demod, profile.FecRepeat, password);
                 if (result != null)
                 {
                     Log.Debug("Successful decode at offset {Offset} (nudge={Nudge})", tryStart, nudge);
                     return result;
+                }
+            }
+
+            // Step 2b: Try expected data position directly (reverb may corrupt sync byte)
+            // The sync byte is often destroyed by preamble reverb over-the-air,
+            // so try decoding from the expected position: preamble + 8 bits.
+            Log.Debug("Step 2b: Trying expected data position (bypassing sync byte)...");
+            for (var preambleOffset = -30; preambleOffset <= 30; preambleOffset++)
+            {
+                var expectedDataBit = profile.PreambleBits + 8 + preambleOffset;
+                for (var nudge = -profile.SamplesPerBit / 2; nudge <= profile.SamplesPerBit / 2; nudge += profile.SamplesPerBit / 4)
+                {
+                    var sampleOffset = alignedStart + nudge;
+                    if (sampleOffset < 0) continue;
+
+                    var dataStartSample = sampleOffset + expectedDataBit * profile.SamplesPerBit;
+                    if (dataStartSample >= samples.Length) continue;
+
+                    var (bits, _) = demod.DemodulateAll(samples, sampleOffset);
+                    if (expectedDataBit >= bits.Length) continue;
+
+                    var result = FrameCodec.DecodeFromPosition(bits, expectedDataBit, profile.FecRepeat, password);
+                    if (result != null)
+                    {
+                        Log.Information("Decoded via expected position (preambleOffset={Offset}, nudge={Nudge})",
+                            preambleOffset, nudge);
+                        return result;
+                    }
+
+                    // Also try soft decode
+                    var softBits = demod.DemodulateAllSoft(samples, sampleOffset);
+                    if (expectedDataBit >= softBits.Length) continue;
+
+                    result = FrameCodec.DecodeFromPositionSoft(softBits, expectedDataBit, profile.FecRepeat, password);
+                    if (result != null)
+                    {
+                        Log.Information("Decoded via expected position soft (preambleOffset={Offset}, nudge={Nudge})",
+                            preambleOffset, nudge);
+                        return result;
+                    }
                 }
             }
 
@@ -115,7 +163,8 @@ public static class ReceiverMode
                  offset < signalStart + profile.SamplesPerBit * 2 && offset < samples.Length;
                  offset++)
             {
-                var result = TryDemodulate(samples, offset, demod, profile.FecRepeat, password);
+                var result = TryDemodulate(samples, offset, demod, profile.FecRepeat, password)
+                          ?? TryDemodulateSoft(samples, offset, demod, profile.FecRepeat, password);
                 if (result != null)
                 {
                     Log.Debug("Brute-force decode succeeded at offset {Offset}", offset);
@@ -135,7 +184,8 @@ public static class ReceiverMode
         var stepSize = profile.SamplesPerBit / 2; // half-bit resolution
         for (var offset = 0; offset < samples.Length - profile.SamplesPerBit * 16; offset += stepSize)
         {
-            var result = TryDemodulate(samples, offset, demod, profile.FecRepeat, password);
+            var result = TryDemodulate(samples, offset, demod, profile.FecRepeat, password)
+                      ?? TryDemodulateSoft(samples, offset, demod, profile.FecRepeat, password);
             if (result != null)
             {
                 Log.Debug("Full-scan decode succeeded at offset {Offset} ({Time:F3}s)",
@@ -218,86 +268,266 @@ public static class ReceiverMode
         // truly corrupted data, so it's safe to attempt.
         if (bits.Length >= 16)
         {
-            return FrameCodec.Decode(bits, fecRepeat, password);
+            var result = FrameCodec.Decode(bits, fecRepeat, password);
+            if (result != null) return result;
         }
 
         return null;
     }
 
     /// <summary>
+    /// Soft-decision variant of TryDemodulate. Uses log-likelihood ratios
+    /// instead of hard bits for much better FEC error correction over-the-air.
+    /// </summary>
+    private static byte[]? TryDemodulateSoft(float[] samples, int startOffset, FskDemodulator demod, int fecRepeat, string? password)
+    {
+        var softBits = demod.DemodulateAllSoft(samples, startOffset);
+        if (softBits.Length < 16) return null;
+
+        return FrameCodec.DecodeSoft(softBits, fecRepeat, password);
+    }
+
+    /// <summary>
     /// Find the sample index where FSK signal first appears.
-    /// Uses a sliding window that counts blocks with clear FSK energy.
-    /// Tolerates individual invalid blocks (caused by reverb, noise bursts).
+    /// Uses adaptive thresholding: computes the noise floor from the quietest portion,
+    /// then finds the first block where combined FSK power jumps significantly above noise.
+    /// Does NOT require alternation (the channel may distort one frequency, making
+    /// alternation invisible before calibration).
     /// </summary>
     private static int FindSignalStart(float[] samples, TransmissionProfile profile)
     {
         var blockSize = profile.SamplesPerBit;
         var numBlocks = samples.Length / blockSize;
-        const int windowSize = 12; // wider window for statistical robustness
-        const int minValid = 4;    // need at least this many valid blocks in the window
-        const int minAlternations = 3; // relaxed alternation requirement
 
-        if (numBlocks < windowSize)
+        if (numBlocks < 8)
         {
-            return numBlocks > 0 ? 0 : -1; // audio too short, try from beginning
+            return numBlocks > 0 ? 0 : -1;
         }
 
-        for (var i = 0; i <= numBlocks - windowSize; i++)
+        // Step 1: Compute per-block total FSK power (mark + space)
+        var blockPowers = new double[numBlocks];
+        for (var i = 0; i < numBlocks; i++)
         {
-            var validCount = 0;
-            var alternations = 0;
-            bool? prevValidBit = null;
+            var offset = i * blockSize;
+            if (offset + blockSize > samples.Length) break;
+            var mp = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqMark);
+            var sp = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqSpace);
+            blockPowers[i] = mp + sp;
+        }
 
-            for (var j = 0; j < windowSize; j++)
+        // Step 2: Find the noise floor (25th percentile of block powers)
+        var sorted = blockPowers.OrderBy(p => p).ToArray();
+        var noiseFloor = sorted[sorted.Length / 4];
+
+        // Adaptive threshold: signal must be at least 50x the noise floor
+        var adaptiveThreshold = Math.Max(profile.SignalThreshold, noiseFloor * 50);
+
+        Log.Information("Adaptive threshold: {Threshold:E2} (noise floor={Floor:E2})",
+            adaptiveThreshold, noiseFloor);
+
+        // Step 3: Find first run of consecutive blocks above threshold
+        // Require a few consecutive blocks to avoid triggering on a single noise spike
+        const int requiredConsecutive = 4;
+        var consecutive = 0;
+
+        for (var i = 0; i < numBlocks; i++)
+        {
+            if (blockPowers[i] >= adaptiveThreshold)
             {
-                var offset = (i + j) * blockSize;
-                var markPower = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqMark);
-                var spacePower = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqSpace);
-                var maxPower = Math.Max(markPower, spacePower);
-                var minPower = Math.Min(markPower, spacePower);
-
-                if (maxPower < profile.SignalThreshold)
+                consecutive++;
+                if (consecutive >= requiredConsecutive)
                 {
-                    continue; // skip, don't break
+                    return (i - requiredConsecutive + 1) * blockSize;
                 }
-
-                if (minPower > 0 && maxPower / minPower < profile.DecisionRatio)
-                {
-                    continue; // skip ambiguous block
-                }
-
-                validCount++;
-                var bit = markPower > spacePower;
-                if (prevValidBit.HasValue && bit != prevValidBit.Value)
-                {
-                    alternations++;
-                }
-
-                prevValidBit = bit;
             }
-
-            if (validCount >= minValid && alternations >= minAlternations)
+            else
             {
-                return i * blockSize;
+                consecutive = 0;
             }
         }
 
         return -1;
     }
 
+    /// <summary>
+    /// Log diagnostic information about FSK signal presence across the recording.
+    /// Shows power levels at mark/space frequencies and mark/space ratio in 0.5s chunks.
+    /// </summary>
+    private static void LogSignalDiagnostics(float[] samples, TransmissionProfile profile)
+    {
+        var blockSize = profile.SamplesPerBit;
+        var chunkDuration = 0.5; // seconds per diagnostic chunk
+        var samplesPerChunk = (int)(chunkDuration * Constants.SampleRate);
+        var numChunks = samples.Length / samplesPerChunk;
+
+        Log.Information("Signal diagnostics (mark={Mark}Hz, space={Space}Hz):", profile.FreqMark, profile.FreqSpace);
+
+        var anySignal = false;
+        for (var c = 0; c < numChunks; c++)
+        {
+            var chunkStart = c * samplesPerChunk;
+            var blocksInChunk = samplesPerChunk / blockSize;
+
+            double maxMark = 0, maxSpace = 0;
+            var validBlocks = 0;
+
+            for (var b = 0; b < blocksInChunk; b++)
+            {
+                var offset = chunkStart + b * blockSize;
+                if (offset + blockSize > samples.Length) break;
+
+                var markPower = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqMark);
+                var spacePower = FskDemodulator.GoertzelPower(samples, offset, blockSize, profile.FreqSpace);
+
+                if (markPower > maxMark) maxMark = markPower;
+                if (spacePower > maxSpace) maxSpace = spacePower;
+
+                var maxP = Math.Max(markPower, spacePower);
+                var minP = Math.Min(markPower, spacePower);
+                if (maxP >= profile.SignalThreshold && (minP == 0 || maxP / minP >= profile.DecisionRatio))
+                {
+                    validBlocks++;
+                }
+            }
+
+            var pct = blocksInChunk > 0 ? 100.0 * validBlocks / blocksInChunk : 0;
+            if (maxMark > 0.0001 || maxSpace > 0.0001)
+            {
+                anySignal = true;
+            }
+
+            Log.Information("  {Time:F1}s: markPwr={Mark:E2}, spacePwr={Space:E2}, valid={Valid}/{Total} ({Pct:F0}%)",
+                c * chunkDuration, maxMark, maxSpace, validBlocks, blocksInChunk, pct);
+        }
+
+        if (!anySignal)
+        {
+            Log.Warning("No significant FSK energy detected at either frequency. " +
+                         "The audio may not contain an FSK signal, or it may be at different frequencies.");
+        }
+    }
+
+    public static float[] ReadWavPublic(string path) => ReadWav(path);
+
     private static float[] ReadWav(string path)
     {
         if (!File.Exists(path))
         {
-            Log.Error("WAV file not found: {File}", path);
+            Log.Error("Audio file not found: {File}", path);
             return Array.Empty<float>();
         }
 
-        var samples = WavFile.Read(path, out var sampleRate, out var channels);
-        Log.Information("Reading WAV: {Rate}Hz, {Ch}ch, {Duration:F1}s",
-            sampleRate, channels, (double)samples.Length / sampleRate);
+        // Use WavFile reader for .wav, MediaFoundation for everything else (mp4, m4a, 3gp, etc.)
+        if (Path.GetExtension(path).Equals(".wav", StringComparison.OrdinalIgnoreCase))
+        {
+            var samples = WavFile.Read(path, out var sampleRate, out var channels);
+            Log.Information("Reading WAV: {Rate}Hz, {Ch}ch, {Duration:F1}s",
+                sampleRate, channels, (double)samples.Length / sampleRate);
+            return samples;
+        }
 
-        return samples;
+        return ReadMediaFoundation(path);
+    }
+
+    /// <summary>
+    /// Read any audio format by converting to WAV via ffmpeg, then reading the WAV.
+    /// Falls back to NAudio MediaFoundation if ffmpeg is not available.
+    /// </summary>
+    private static float[] ReadMediaFoundation(string path)
+    {
+        // Try ffmpeg first (works everywhere, no COM dependency)
+        var ffmpegResult = TryConvertWithFfmpeg(path);
+        if (ffmpegResult != null)
+        {
+            return ffmpegResult;
+        }
+
+        // Fallback: NAudio MediaFoundation (Windows only, needs COM)
+        try
+        {
+            using var reader = new NAudio.Wave.MediaFoundationReader(path);
+            var targetFormat = new NAudio.Wave.WaveFormat(Constants.SampleRate, 16, 1);
+            using var resampler = new NAudio.Wave.MediaFoundationResampler(reader, targetFormat);
+            resampler.ResamplerQuality = 60;
+
+            var allBytes = new List<byte>();
+            var buffer = new byte[targetFormat.AverageBytesPerSecond];
+            int bytesRead;
+            while ((bytesRead = resampler.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                allBytes.AddRange(buffer.AsSpan(0, bytesRead).ToArray());
+            }
+
+            var samples = new float[allBytes.Count / 2];
+            for (var i = 0; i < samples.Length; i++)
+            {
+                samples[i] = BitConverter.ToInt16(allBytes.ToArray(), i * 2) / 32768f;
+            }
+
+            Log.Information("Reading {Ext}: {Rate}Hz, mono, {Duration:F1}s (via MediaFoundation)",
+                Path.GetExtension(path).ToUpper(), Constants.SampleRate,
+                (double)samples.Length / Constants.SampleRate);
+            return samples;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Failed to read audio file: {Error}", ex.Message);
+            Log.Error("Install ffmpeg (winget install Gyan.FFmpeg) or use a .wav file");
+            return Array.Empty<float>();
+        }
+    }
+
+    /// <summary>
+    /// Convert any audio file to mono 48kHz PCM WAV via ffmpeg, then read the WAV.
+    /// Returns null if ffmpeg is not available.
+    /// </summary>
+    private static float[]? TryConvertWithFfmpeg(string inputPath)
+    {
+        var tempWav = Path.Combine(Path.GetTempPath(), $"vt-{Guid.NewGuid():N}.wav");
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "ffmpeg",
+                Arguments = $"-i \"{inputPath}\" -ar {Constants.SampleRate} -ac 1 -sample_fmt s16 -y \"{tempWav}\"",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null)
+            {
+                return null;
+            }
+
+            proc.WaitForExit(30_000);
+            if (!proc.HasExited || proc.ExitCode != 0)
+            {
+                Log.Debug("ffmpeg conversion failed (exit code {Code})", proc.HasExited ? proc.ExitCode : -1);
+                return null;
+            }
+
+            var samples = WavFile.Read(tempWav, out var sampleRate, out var channels);
+            Log.Information("Reading {Ext}: {Rate}Hz, {Ch}ch, {Duration:F1}s (via ffmpeg)",
+                Path.GetExtension(inputPath).ToUpper(), sampleRate, channels,
+                (double)samples.Length / sampleRate);
+            return samples;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // ffmpeg not found on PATH
+            Log.Debug("ffmpeg not found on PATH, falling back to MediaFoundation");
+            return null;
+        }
+        finally
+        {
+            if (File.Exists(tempWav))
+            {
+                File.Delete(tempWav);
+            }
+        }
     }
 
     private static float[] RecordFromMicrophone(IAudioBackend audio, int deviceIndex, int timeoutSeconds)

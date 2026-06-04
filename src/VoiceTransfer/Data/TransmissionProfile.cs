@@ -10,7 +10,7 @@ namespace VoiceTransfer.Data;
 ///   slow   -- 150 baud, 256-bit preamble, 5x FEC, 1600/2400 Hz (800 Hz separation). Most resilient to noise.
 ///   normal -- 300 baud, 128-bit preamble, 3x FEC, 1800/2200 Hz (400 Hz separation). Good balance (default).
 ///   fast   -- 350 baud, 64-bit preamble,  1x FEC, 1800/2200 Hz (400 Hz separation). Faster but needs cleaner signal.
-///   robust -- 100 baud, 256-bit preamble, 5x FEC, 1500/2500 Hz (1000 Hz separation). Designed for over-the-air (speaker-to-mic).
+///   robust -- 50 baud, 512-bit preamble, 7x FEC, 2000/2500 Hz (500 Hz separation). Designed for over-the-air (speaker-to-mic).
 /// </summary>
 public class TransmissionProfile
 {
@@ -63,6 +63,14 @@ public class TransmissionProfile
     /// </summary>
     public double FreqSpace { get; init; } = 1800.0;
 
+    /// <summary>
+    /// Fraction of each bit period to skip at the start and end (symmetric guard interval).
+    /// Reduces inter-symbol interference from room reverb/echo.
+    /// Higher values improve ISI rejection but reduce Goertzel resolution.
+    /// Must ensure the analysis window has enough samples: SamplesPerBit * (1 - 2*Guard) >= 16.
+    /// </summary>
+    public double GuardFraction { get; init; } = 0.0;
+
     // --- Derived (computed from BaudRate) ---
 
     public int SamplesPerBit => Constants.SampleRate / BaudRate;
@@ -106,22 +114,33 @@ public class TransmissionProfile
     };
 
     /// <summary>
-    /// Robust preset: designed for over-the-air (speaker → microphone) transmission.
-    /// Wide frequency separation (1000 Hz), slow baud rate for narrow Goertzel bins,
-    /// strong FEC, high amplitude, long preamble, no stealth noise.
-    /// Goertzel bin width at 100 baud = 100 Hz, vs 1000 Hz separation → no overlap.
+    /// Robust preset: designed for over-the-air (speaker → microphone) transmission
+    /// through voice codecs (WhatsApp, Telegram, etc.).
+    ///
+    /// Key design choices:
+    /// - 50 baud: 20ms per bit gives strong Goertzel SNR and reduces ISI from reverb.
+    ///   Goertzel bin width = 50 Hz (vs 400 Hz separation → 8 bins apart, zero crosstalk).
+    /// - 2000/2500 Hz: both frequencies in the voice codec sweet spot (1500-3000 Hz)
+    ///   where pre-emphasis, speaker response, and mic sensitivity are similar.
+    ///   500 Hz separation lands on exact Goertzel bins at all guard intervals.
+    ///   At 50 baud with guard=0.40, analysis window=192 samples, bin width=250 Hz,
+    ///   so 500 Hz = 2 bins apart → clean separation with no spectral leakage.
+    /// - 512-bit preamble: longer preamble for reliable sync at lower baud rate.
+    /// - 7x FEC: stronger error correction to handle residual ISI/reverb errors.
+    /// - 0.40 guard interval: skips 40% of each bit boundary to reduce ISI.
     /// </summary>
     private static TransmissionProfile Robust => new()
     {
-        BaudRate = 100,
-        PreambleBits = 256,
+        BaudRate = 50,
+        PreambleBits = 512,
         Amplitude = 0.5,
         SignalThreshold = 0.00005,
         DecisionRatio = 1.2,
-        FecRepeat = 5,
+        FecRepeat = 7,
         FreqMark = 2500.0,
-        FreqSpace = 1500.0, // 1000 Hz separation for maximum discrimination
+        FreqSpace = 2000.0, // 500 Hz separation, exact Goertzel bins at all guard values
         StealthNoise = 0.0,  // no added noise -- clarity over stealth
+        GuardFraction = 0.40, // aggressive guard for reverb rejection at 50 baud (192 analysis samples)
     };
 
     private static TransmissionProfile FromPreset(string name) => name.ToLowerInvariant() switch
@@ -138,14 +157,14 @@ public class TransmissionProfile
     /// </summary>
     public static TransmissionProfile FromOptions(string preset, int? baudRate, int? preambleBits,
         double? amplitude, double? signalThreshold, double? decisionRatio, int? fecRepeat,
-        double? freqMark = null, double? freqSpace = null)
+        double? freqMark = null, double? freqSpace = null, double? guardFraction = null)
     {
         var profile = FromPreset(preset);
 
         // Override individual fields if explicitly supplied
         if (baudRate.HasValue || preambleBits.HasValue || amplitude.HasValue ||
             signalThreshold.HasValue || decisionRatio.HasValue || fecRepeat.HasValue ||
-            freqMark.HasValue || freqSpace.HasValue)
+            freqMark.HasValue || freqSpace.HasValue || guardFraction.HasValue)
         {
             profile = new TransmissionProfile
             {
@@ -157,6 +176,7 @@ public class TransmissionProfile
                 FecRepeat = fecRepeat ?? profile.FecRepeat,
                 FreqMark = freqMark ?? profile.FreqMark,
                 FreqSpace = freqSpace ?? profile.FreqSpace,
+                GuardFraction = guardFraction ?? profile.GuardFraction,
             };
         }
 

@@ -33,7 +33,7 @@ try
         settings.CaseInsensitiveEnumValues = true;
     });
 
-    parser.ParseArguments<SendOptions, ReceiveOptions, LiveSendOptions, LiveReceiveOptions, TestOptions>(args)
+    parser.ParseArguments<SendOptions, ReceiveOptions, LiveSendOptions, LiveReceiveOptions, TestOptions, RecoverOptions>(args)
         .WithParsed<SendOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
@@ -65,6 +65,10 @@ try
             var inputDevice = DeviceResolver.ResolveInput(audio, opts.DeviceIndex);
             var outputDevice = DeviceResolver.ResolveOutput(audio, opts.OutputDeviceIndex);
             TestMode.Run(audio, inputDevice, outputDevice, opts.Duration);
+        })
+        .WithParsed<RecoverOptions>(opts =>
+        {
+            RecoverMode.Run(opts.InputWav, opts.OutputFile, opts.Password);
         })
         .WithNotParsed(_ => { }); // CommandLineParser already prints help
 }
