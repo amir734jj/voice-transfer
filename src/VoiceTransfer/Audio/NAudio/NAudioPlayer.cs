@@ -12,18 +12,20 @@ internal sealed class NAudioPlayer(int deviceIndex) : IAudioPlayer
         var provider = new FloatArrayProvider(samples, format);
         using var done = new ManualResetEventSlim(false);
 
-        var waveOut = new WaveOutEvent { DeviceNumber = deviceIndex };
-        try
+        using var waveOut = new WaveOutEvent
         {
-            waveOut.PlaybackStopped += (_, _) => done.Set();
-            waveOut.Init(provider);
-            waveOut.Play();
-            done.Wait();
-        }
-        finally
-        {
-            waveOut.Dispose();
-        }
+            DeviceNumber = deviceIndex,
+            DesiredLatency = 150,
+            NumberOfBuffers = 3
+        };
+
+        waveOut.PlaybackStopped += (_, _) => done.Set();
+        // Convert float samples to 16-bit PCM for universal waveOut compatibility
+        waveOut.Init(provider, convertTo16Bit: true);
+        waveOut.Play();
+
+        var durationMs = (int)(samples.Length * 1000.0 / Constants.SampleRate / Constants.Channels);
+        done.Wait(durationMs + 500);
     }
 
     public void Dispose() { }

@@ -11,9 +11,13 @@ internal class LiveReceiveOptions : ProfileOptions
     [Option("output-device", Default = 0, HelpText = "Audio output device index (speakers, for voice passthrough).")]
     public int OutputDeviceIndex { get; set; }
 
-    [Option("loopback", Default = false, HelpText = "Use WASAPI loopback capture to capture system audio output directly (Windows only, for same-machine testing).")]
+    [Option("loopback", Default = false,
+        HelpText =
+            "Use WASAPI loopback capture to capture system audio output directly (Windows only, for same-machine testing).")]
     public bool Loopback { get; set; }
 
-    [Option("passthrough", Default = false, HelpText = "Enable voice passthrough: play captured mic audio through speakers (use headphones to avoid feedback).")]
+    [Option("passthrough", Default = false,
+        HelpText =
+            "Enable voice passthrough: play captured mic audio through speakers (use headphones to avoid feedback).")]
     public bool Passthrough { get; set; }
 }
