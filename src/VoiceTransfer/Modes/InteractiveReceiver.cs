@@ -104,6 +104,19 @@ public static class InteractiveReceiver
         var messageCount = 0;
         var diagCounter = 0;
 
+        // Calculate minimum buffer retention based on profile.
+        // Must keep enough audio to contain a full message:
+        // preamble + sync + max reasonable payload with FEC.
+        // At 50 baud with 512-bit preamble and 7x FEC, a short message is ~24s.
+        var preambleSamples = profile.SamplesPerBit * (profile.PreambleBits + 8);
+        var maxPayloadBits = 200 * 8 * profile.FecRepeat; // 200 bytes max payload
+        var maxMessageSamples = preambleSamples + maxPayloadBits * profile.SamplesPerBit;
+        var keepSamples = Math.Max(Constants.SampleRate * 30, maxMessageSamples + Constants.SampleRate * 5);
+
+        // Minimum new audio before attempting decode.
+        // At 50 baud, each bit is 960 samples; need at least a few bits to be useful.
+        var minNewSamples = Math.Max(Constants.SampleRate, profile.SamplesPerBit * 16);
+
         try
         {
             while (!cts.Token.IsCancellationRequested)
@@ -121,7 +134,7 @@ public static class InteractiveReceiver
                         continue;
                     }
 
-                    if (currentWritePos - lastProcessedEnd < Constants.SampleRate)
+                    if (currentWritePos - lastProcessedEnd < minNewSamples)
                     {
                         continue;
                     }
@@ -157,7 +170,6 @@ public static class InteractiveReceiver
                 }
                 else
                 {
-                    var keepSamples = Constants.SampleRate * 10;
                     lock (bufferLock)
                     {
                         if (currentWritePos > keepSamples + Constants.SampleRate)

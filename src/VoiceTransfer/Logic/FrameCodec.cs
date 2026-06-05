@@ -587,7 +587,7 @@ public static class FrameCodec
     /// Encrypt data with AES-256-GCM. Output: [nonce(12)] [ciphertext(N)] [tag(16)]
     /// Key is derived from the password via PBKDF2-SHA256.
     /// </summary>
-    public static byte[] Encrypt(byte[] plaintext, string password)
+    private static byte[] Encrypt(byte[] plaintext, string password)
     {
         var key = DeriveKey(password);
         var nonce = new byte[AesNonceSize];
@@ -649,7 +649,7 @@ public static class FrameCodec
     /// XOR stream cipher with a simple PRNG. Same function for scramble/descramble.
     /// Used as fallback when no password is provided (whitening only, not secure).
     /// </summary>
-    public static byte[] Scramble(byte[] data)
+    private static byte[] Scramble(byte[] data)
     {
         var result = new byte[data.Length];
         var state = Constants.ScrambleKey;
@@ -753,15 +753,7 @@ public static class FrameCodec
     {
         for (var i = startFrom; i <= bits.Length - pattern.Length; i++)
         {
-            var match = true;
-            for (var j = 0; j < pattern.Length; j++)
-            {
-                if (bits[i + j] != pattern[j])
-                {
-                    match = false;
-                    break;
-                }
-            }
+            var match = !pattern.Where((t, j) => bits[i + j] != t).Any();
             if (match)
             {
                 return i;
