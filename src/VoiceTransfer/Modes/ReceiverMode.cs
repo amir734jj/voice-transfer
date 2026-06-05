@@ -76,7 +76,7 @@ public static class ReceiverMode
     /// Core demodulation pipeline: samples -> bits -> frame -> file data.
     /// Tries multiple alignment offsets to find the best one.
     /// </summary>
-    public static byte[]? DemodulateAndDecode(float[] samples, TransmissionProfile profile, string? password = null)
+    public static byte[]? DemodulateAndDecode(float[] samples, TransmissionProfile profile, string? password = null, bool skipFullScan = false)
     {
         Log.Debug("Step 1: Signal detection...");
         var demod = new FskDemodulator(profile);
@@ -192,6 +192,13 @@ public static class ReceiverMode
         // Step 4: Full-scan fallback -- preamble detection may fail over the air
         // even though the data signal is present. Scan the entire audio at coarse
         // intervals, trying to decode at each position.
+        // Skipped in live/interactive mode where it's too expensive and would
+        // block reception of the next message.
+        if (skipFullScan)
+        {
+            return null;
+        }
+
         Log.Debug("Step 4: Full-scan fallback (scanning entire audio)...");
         var stepSize = profile.SamplesPerBit / 2; // half-bit resolution
         for (var offset = 0; offset < samples.Length - profile.SamplesPerBit * 16; offset += stepSize)
@@ -341,15 +348,19 @@ public static class ReceiverMode
         var sorted = blockPowers.OrderBy(p => p).ToArray();
         var noiseFloor = sorted[sorted.Length / 4];
 
-        // Adaptive threshold: signal must be at least 50x the noise floor
-        var adaptiveThreshold = Math.Max(profile.SignalThreshold, noiseFloor * 50);
+        // Adaptive threshold: signal must be clearly above the noise floor.
+        var adaptiveThreshold = Math.Max(profile.SignalThreshold, noiseFloor * 20);
 
         Log.Information("Adaptive threshold: {Threshold:E2} (noise floor={Floor:E2})",
             adaptiveThreshold, noiseFloor);
 
-        // Step 3: Find first run of consecutive blocks above threshold
-        // Require a few consecutive blocks to avoid triggering on a single noise spike
-        const int requiredConsecutive = 4;
+        // Step 3: Find first run of consecutive blocks above threshold.
+        // Scale required consecutive blocks with preamble length to reject noise.
+        // A real FSK preamble produces hundreds of consecutive strong blocks;
+        // random mic noise rarely sustains even a few above threshold.
+        // Robust (512-bit preamble): 32 consecutive = ~640ms of sustained signal.
+        // Normal (128-bit preamble): 8 consecutive = ~27ms.
+        var requiredConsecutive = Math.Max(8, profile.PreambleBits / 16);
         var consecutive = 0;
 
         for (var i = 0; i < numBlocks; i++)

@@ -153,10 +153,14 @@ public static class InteractiveReceiver
                     LogPeakPower(snapshot, profile);
                 }
 
-                // Preprocess: bandpass + normalize for over-the-air robustness
-                var processed = DspFilters.Preprocess(snapshot, profile);
+                // Preprocess: DC removal + bandpass for over-the-air robustness.
+                // Skip normalization in live mode: normalization amplifies ambient
+                // noise to look like signal, causing false detections and CPU-heavy
+                // full-scan attempts. Real FSK from speakers has sufficient Goertzel
+                // power even at low mic levels.
+                var processed = DspFilters.PreprocessLive(snapshot, profile);
 
-                var decoded = ReceiverMode.DemodulateAndDecode(processed, profile, password);
+                var decoded = ReceiverMode.DemodulateAndDecode(processed, profile, password, skipFullScan: true);
                 if (decoded != null)
                 {
                     messageCount++;
@@ -252,7 +256,7 @@ public static class InteractiveReceiver
         var strength = maxPower > profile.SignalThreshold * 10 ? "STRONG"
                         : maxPower > profile.SignalThreshold ? "WEAK" : "NONE";
 
-        Log.Debug("FSK power: mark={Mark:E2} space={Space:E2} threshold={Thresh:E2} [{Strength}]",
+        Log.Information("FSK power: mark={Mark:E2} space={Space:E2} threshold={Thresh:E2} [{Strength}]",
             maxMark, maxSpace, profile.SignalThreshold, strength);
     }
 }

@@ -37,6 +37,27 @@ public static class DspFilters
     }
 
     /// <summary>
+    /// Live/interactive preprocessing: DC removal + bandpass only, no normalization.
+    /// In live mode, normalization amplifies ambient noise to look like FSK signal,
+    /// causing false detections. Working with actual signal levels lets the adaptive
+    /// threshold properly distinguish real FSK from silence.
+    /// </summary>
+    public static float[] PreprocessLive(float[] samples, TransmissionProfile profile)
+    {
+        var result = new float[samples.Length];
+        Array.Copy(samples, result, samples.Length);
+
+        RemoveDc(result);
+
+        var freqLow = Math.Min(profile.FreqMark, profile.FreqSpace);
+        var freqHigh = Math.Max(profile.FreqMark, profile.FreqSpace);
+        var margin = (freqHigh - freqLow) * 0.5;
+        BandpassFilter(result, freqLow - margin, freqHigh + margin, Constants.SampleRate);
+
+        return result;
+    }
+
+    /// <summary>
     /// Remove DC offset by subtracting the mean.
     /// Microphones and ADCs commonly introduce small DC bias that shifts
     /// the signal away from zero, affecting power estimates.
