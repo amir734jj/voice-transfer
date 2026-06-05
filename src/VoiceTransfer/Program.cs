@@ -33,7 +33,26 @@ try
         settings.CaseInsensitiveEnumValues = true;
     });
 
-    parser.ParseArguments<SendOptions, ReceiveOptions, LiveSendOptions, LiveReceiveOptions, TestOptions, RecoverOptions>(args)
+    parser.ParseArguments<SendOptions, ReceiveOptions, LiveSendOptions, LiveReceiveOptions, TestOptions, RecoverOptions, ListDevicesOptions>(args)
+        .WithParsed<ListDevicesOptions>(opts =>
+        {
+            var audio = AudioBackendFactory.Create(opts.AudioEngine);
+            var inputs = audio.GetInputDeviceNames();
+            var outputs = audio.GetOutputDeviceNames();
+
+            Console.WriteLine("=== Input Devices (microphones) ===");
+            for (var i = 0; i < inputs.Count; i++)
+                Console.WriteLine($"  [{i}] {inputs[i]}");
+            if (inputs.Count == 0)
+                Console.WriteLine("  (none found)");
+
+            Console.WriteLine();
+            Console.WriteLine("=== Output Devices (speakers) ===");
+            for (var i = 0; i < outputs.Count; i++)
+                Console.WriteLine($"  [{i}] {outputs[i]}");
+            if (outputs.Count == 0)
+                Console.WriteLine("  (none found)");
+        })
         .WithParsed<SendOptions>(opts =>
         {
             var audio = AudioBackendFactory.Create(opts.AudioEngine);
