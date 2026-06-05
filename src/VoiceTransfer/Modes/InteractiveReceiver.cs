@@ -160,7 +160,7 @@ public static class InteractiveReceiver
                 // power even at low mic levels.
                 var processed = DspFilters.PreprocessLive(snapshot, profile);
 
-                var decoded = ReceiverMode.DemodulateAndDecode(processed, profile, password, skipFullScan: true);
+                var decoded = ReceiverMode.DemodulateAndDecode(processed, profile, password, skipFullScan: true, strictDetection: !loopback);
                 if (decoded != null)
                 {
                     messageCount++;

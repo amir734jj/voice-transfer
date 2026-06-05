@@ -76,13 +76,13 @@ public static class ReceiverMode
     /// Core demodulation pipeline: samples -> bits -> frame -> file data.
     /// Tries multiple alignment offsets to find the best one.
     /// </summary>
-    public static byte[]? DemodulateAndDecode(float[] samples, TransmissionProfile profile, string? password = null, bool skipFullScan = false)
+    public static byte[]? DemodulateAndDecode(float[] samples, TransmissionProfile profile, string? password = null, bool skipFullScan = false, bool strictDetection = false)
     {
         Log.Debug("Step 1: Signal detection...");
         var demod = new FskDemodulator(profile);
 
         // Find approximate start of signal (first block with energy at FSK frequencies)
-        var signalStart = FindSignalStart(samples, profile);
+        var signalStart = FindSignalStart(samples, profile, strictDetection);
         if (signalStart >= 0)
         {
             Log.Information("Signal detected at sample {Start} ({Time:F3}s)",
@@ -319,7 +319,7 @@ public static class ReceiverMode
     /// Does NOT require alternation (the channel may distort one frequency, making
     /// alternation invisible before calibration).
     /// </summary>
-    private static int FindSignalStart(float[] samples, TransmissionProfile profile)
+    private static int FindSignalStart(float[] samples, TransmissionProfile profile, bool strictDetection = false)
     {
         var blockSize = profile.SamplesPerBit;
         var numBlocks = samples.Length / blockSize;
@@ -344,23 +344,47 @@ public static class ReceiverMode
             blockPowers[i] = mp + sp;
         }
 
-        // Step 2: Find the noise floor (25th percentile of block powers)
+        // Step 2: Compute adaptive threshold.
         var sorted = blockPowers.OrderBy(p => p).ToArray();
-        var noiseFloor = sorted[sorted.Length / 4];
 
-        // Adaptive threshold: signal must be clearly above the noise floor.
-        var adaptiveThreshold = Math.Max(profile.SignalThreshold, noiseFloor * 20);
+        double adaptiveThreshold;
+        double noiseFloor;
 
-        Log.Information("Adaptive threshold: {Threshold:E2} (noise floor={Floor:E2})",
-            adaptiveThreshold, noiseFloor);
+        if (strictDetection)
+        {
+            // Mic mode: use 5th percentile × 20.
+            // Mic captures continuously so the buffer always has ambient noise
+            // blocks. The 5th percentile reliably reflects noise even when
+            // most of the buffer is signal.
+            var idx = Math.Max(0, sorted.Length / 20);
+            noiseFloor = sorted[idx];
+            adaptiveThreshold = Math.Max(profile.SignalThreshold, noiseFloor * 20);
+        }
+        else
+        {
+            // Loopback/batch: use 10% of the 90th-percentile block power.
+            // WASAPI loopback only captures when audio plays, so the buffer
+            // may contain NO silence blocks at all — percentile-based noise
+            // floor estimates would return signal-level values.
+            // Using a fraction of the peak instead works regardless of the
+            // silence/signal ratio in the buffer.
+            var highIdx = sorted.Length * 9 / 10;
+            var highPower = sorted[Math.Min(highIdx, sorted.Length - 1)];
+            noiseFloor = highPower;
+            adaptiveThreshold = Math.Max(profile.SignalThreshold, highPower * 0.1);
+        }
+
+        Log.Information("Adaptive threshold: {Threshold:E2} (ref={Floor:E2}, strict={Strict})",
+            adaptiveThreshold, noiseFloor, strictDetection);
 
         // Step 3: Find first run of consecutive blocks above threshold.
-        // Scale required consecutive blocks with preamble length to reject noise.
-        // A real FSK preamble produces hundreds of consecutive strong blocks;
-        // random mic noise rarely sustains even a few above threshold.
-        // Robust (512-bit preamble): 32 consecutive = ~640ms of sustained signal.
-        // Normal (128-bit preamble): 8 consecutive = ~27ms.
-        var requiredConsecutive = Math.Max(8, profile.PreambleBits / 16);
+        // Strict mode (mic): scale with preamble length to reject false triggers.
+        //   Robust (512-bit preamble): 32 consecutive = ~640ms sustained signal.
+        //   Normal (128-bit preamble): 8 consecutive.
+        // Non-strict mode (loopback/batch): lenient (3-4 blocks).
+        var requiredConsecutive = strictDetection
+            ? Math.Max(8, profile.PreambleBits / 16)
+            : (profile.BaudRate <= 100 ? 3 : 4);
         var consecutive = 0;
 
         for (var i = 0; i < numBlocks; i++)
