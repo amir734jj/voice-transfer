@@ -67,6 +67,32 @@ VoiceTransfer send -f data.bin -p normal
 VoiceTransfer send -f data.bin -p fast
 ```
 
+For a physical speaker-to-microphone path, use `robust` on both endpoints:
+
+```bash
+VoiceTransfer live-receive -p robust
+VoiceTransfer live-send -p robust
+```
+
+The receiver compensates for constant sample-clock differences between separate
+speaker and microphone devices. The robust profile also disables stealth noise,
+uses wider tone separation, and adds guard intervals for room echo.
+
+### Acoustic-channel diagnostics
+
+The integration tests simulate speaker/microphone coloration, clipping, room
+echo, 3 dB SNR noise, and ±150 ppm sample-clock error. They dump the simulated
+microphone recordings to `TestResults/`:
+
+```bash
+dotnet test tests/VoiceTransfer.Tests/VoiceTransfer.Tests.csproj --filter AcousticChannelTests
+VoiceTransfer receive -i TestResults/acoustic-noise-echo.wav -o recovered.txt -p robust
+```
+
+If the simulated recordings decode but a physical recording does not, inspect
+the physical WAV for microphone noise suppression, dropouts, clipping, or tones
+removed by audio enhancement software.
+
 ### Parameter overrides
 
 All transmission parameters can be individually overridden. Sender and receiver must match.

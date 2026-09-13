@@ -169,6 +169,38 @@ public static class ReceiverMode
                 }
             }
 
+            // Separate speaker and microphone devices have independent sample clocks.
+            // Even a small error accumulates across a long frame until fixed-width
+            // symbol windows cross bit boundaries. Try realistic clock offsets before
+            // the much more expensive sample-by-sample alignment scan.
+            Log.Debug("Step 2c: Trying sample-clock drift compensation...");
+            foreach (var clockErrorPpm in ClockErrorCandidatesPpm())
+            {
+                demod.SetClockErrorPpm(clockErrorPpm);
+
+                for (var nudge = -profile.SamplesPerBit / 4;
+                     nudge <= profile.SamplesPerBit / 4;
+                     nudge += profile.SamplesPerBit / 8)
+                {
+                    var tryStart = alignedStart + nudge;
+                    if (tryStart < 0)
+                    {
+                        continue;
+                    }
+
+                    var result = TryDemodulate(samples, tryStart, demod, profile.FecRepeat, password)
+                              ?? TryDemodulateSoft(samples, tryStart, demod, profile.FecRepeat, password);
+                    if (result != null)
+                    {
+                        Log.Information("Decoded with sample-clock correction {ClockErrorPpm:+0;-0} ppm",
+                            clockErrorPpm);
+                        return result;
+                    }
+                }
+            }
+
+            demod.SetClockErrorPpm(0);
+
             // Brute force: try every single-sample offset in a bit-width window
             Log.Debug("Step 3: Brute-force alignment search...");
             for (var offset = Math.Max(0, signalStart - profile.SamplesPerBit);
@@ -214,6 +246,20 @@ public static class ReceiverMode
         }
 
         return null;
+    }
+
+    private static IEnumerable<int> ClockErrorCandidatesPpm()
+    {
+        for (var magnitude = 50; magnitude <= 500; magnitude += 50)
+        {
+            yield return magnitude;
+            yield return -magnitude;
+        }
+
+        yield return 750;
+        yield return -750;
+        yield return 1000;
+        yield return -1000;
     }
 
     private static byte[]? TryDemodulate(float[] samples, int startOffset, FskDemodulator demod, int fecRepeat, string? password)

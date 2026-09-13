@@ -19,6 +19,7 @@ public class FskDemodulator(TransmissionProfile profile)
     // Per-frequency gain compensation (calibrated from signal)
     private double _markGain = 1.0;
     private double _spaceGain = 1.0;
+    private double _samplesPerBit = profile.SamplesPerBit;
     
     // Adaptive calibration: per-block raw power levels and sliding-window gains
     private int _calSignalStart;
@@ -27,6 +28,11 @@ public class FskDemodulator(TransmissionProfile profile)
     private double[] _blockMarkGain = [];
     private double[] _blockSpaceGain = [];
     private const int AdaptiveWindowSize = 40; // sliding window for local average (±20 blocks)
+
+    public void SetClockErrorPpm(int clockErrorPpm)
+    {
+        _samplesPerBit = profile.SamplesPerBit * (1.0 + clockErrorPpm / 1_000_000.0);
+    }
     /// <summary>
     /// Compute the Goertzel magnitude^2 at a target frequency for a block of samples.
     /// This is equivalent to computing |DFT[k]|^2 but only at one frequency bin,
@@ -96,7 +102,7 @@ public class FskDemodulator(TransmissionProfile profile)
         double mg = _markGain, sg = _spaceGain;
         if (_blockMarkGain.Length > 0)
         {
-            var blockIdx = (offset - _calSignalStart) / profile.SamplesPerBit;
+            var blockIdx = (int)((offset - _calSignalStart) / _samplesPerBit);
             if (blockIdx >= 0 && blockIdx < _blockMarkGain.Length)
             {
                 mg = _blockMarkGain[blockIdx];
@@ -257,14 +263,16 @@ public class FskDemodulator(TransmissionProfile profile)
     public (bool[] bits, bool[] valid) DemodulateAll(float[] samples, int startOffset = 0)
     {
         var blockSize = profile.SamplesPerBit;
-        var numBlocks = (samples.Length - startOffset) / blockSize;
+        var numBlocks = (int)((samples.Length - startOffset - blockSize) / _samplesPerBit) + 1;
+        numBlocks = Math.Max(0, numBlocks);
 
         var bits = new bool[numBlocks];
         var valid = new bool[numBlocks];
 
         for (var i = 0; i < numBlocks; i++)
         {
-            (bits[i], valid[i]) = DemodulateBlock(samples, startOffset + i * blockSize, blockSize);
+            var offset = startOffset + (int)Math.Round(i * _samplesPerBit);
+            (bits[i], valid[i]) = DemodulateBlock(samples, offset, blockSize);
         }
 
         return (bits, valid);
@@ -281,12 +289,14 @@ public class FskDemodulator(TransmissionProfile profile)
     public double[] DemodulateAllSoft(float[] samples, int startOffset = 0)
     {
         var blockSize = profile.SamplesPerBit;
-        var numBlocks = (samples.Length - startOffset) / blockSize;
+        var numBlocks = (int)((samples.Length - startOffset - blockSize) / _samplesPerBit) + 1;
+        numBlocks = Math.Max(0, numBlocks);
         var softBits = new double[numBlocks];
 
         for (var i = 0; i < numBlocks; i++)
         {
-            softBits[i] = DemodulateBlockSoft(samples, startOffset + i * blockSize, blockSize);
+            var offset = startOffset + (int)Math.Round(i * _samplesPerBit);
+            softBits[i] = DemodulateBlockSoft(samples, offset, blockSize);
         }
 
         return softBits;
@@ -329,7 +339,7 @@ public class FskDemodulator(TransmissionProfile profile)
         double mg = _markGain, sg = _spaceGain;
         if (_blockMarkGain.Length > 0)
         {
-            var blockIdx = (offset - _calSignalStart) / profile.SamplesPerBit;
+            var blockIdx = (int)((offset - _calSignalStart) / _samplesPerBit);
             if (blockIdx >= 0 && blockIdx < _blockMarkGain.Length)
             {
                 mg = _blockMarkGain[blockIdx];
