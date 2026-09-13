@@ -41,7 +41,7 @@ jobs:
 
       - name: Publish
         run: >
-          dotnet publish src/VoiceTransfer/VoiceTransfer.csproj
+          dotnet publish VoiceTransfer/VoiceTransfer.csproj
           -c Release
           -r ${{ matrix.rid }}
           -p:EnableCompressionInSingleFile=true
@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           vpk download github --repoUrl https://github.com/${{ github.repository }} --channel ${{ matrix.channel }} --token ${{ secrets.GITHUB_TOKEN }} || true
-          vpk pack -u VoiceTransfer -v 1.0.${{ github.run_number }} -p src/VoiceTransfer/bin/Release/net10.0/${{ matrix.rid }}/publish -e ${{ matrix.mainExe }} --channel ${{ matrix.channel }}
+          vpk pack -u VoiceTransfer -v 1.0.${{ github.run_number }} -p VoiceTransfer/bin/Release/net10.0/${{ matrix.rid }}/publish -e ${{ matrix.mainExe }} --channel ${{ matrix.channel }}
 
       - name: Upload Velopack artifacts
         uses: actions/upload-artifact@v4
