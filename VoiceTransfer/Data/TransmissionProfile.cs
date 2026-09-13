@@ -1,0 +1,267 @@
+using Serilog;
+
+namespace VoiceTransfer.Data;
+
+/// <summary>
+/// Configurable transmission parameters. Both sender and receiver must use
+/// identical settings for successful data transfer.
+///
+/// Presets:
+///   slow   -- 150 baud, 256-bit preamble, 5x FEC, 1600/2400 Hz (800 Hz separation). Most resilient to noise.
+///   normal -- 300 baud, 128-bit preamble, 3x FEC, 1800/2200 Hz (400 Hz separation). Good balance (default).
+///   fast   -- 350 baud, 64-bit preamble,  1x FEC, 1800/2200 Hz (400 Hz separation). Faster but needs cleaner signal.
+///   robust -- 50 baud, 512-bit preamble, 7x FEC, 2000/2500 Hz (500 Hz separation). Designed for over-the-air (speaker-to-mic).
+/// </summary>
+public class TransmissionProfile
+{
+    // --- Configurable fields ---
+
+    /// <summary>
+    /// Bits per second. Higher = faster but less noise-resilient.
+    /// </summary>
+    public int BaudRate { get; private init; } = 300;
+
+    /// <summary>
+    /// Number of alternating preamble bits for clock recovery. More = better sync.
+    /// </summary>
+    public int PreambleBits { get; private init; } = 128;
+
+    /// <summary>
+    /// Signal amplitude [0-1]. Higher = more robust but more audible.
+    /// </summary>
+    public double Amplitude { get; private init; } = 0.12;
+
+    /// <summary>
+    /// Stealth noise level as a fraction of amplitude [0-1].
+    /// 0 = no added noise (maximum clarity for over-the-air).
+    /// 0.35 = default stealth shaping (sounds like line static).
+    /// </summary>
+    public double StealthNoise { get; private init; } = 0.35;
+
+    /// <summary>
+    /// Minimum Goertzel power to consider a signal present.
+    /// </summary>
+    public double SignalThreshold { get; private init; } = 0.0001;
+
+    /// <summary>
+    /// Required ratio of dominant/weaker frequency power for a valid bit decision.
+    /// </summary>
+    public double DecisionRatio { get; private init; } = 1.5;
+
+    /// <summary>
+    /// FEC bit repetition factor (1=none, 3=can fix 1 error/group, 5=can fix 2).
+    /// </summary>
+    public int FecRepeat { get; private init; } = 3;
+
+    /// <summary>
+    /// FSK mark frequency in Hz (bit=1). Must be within telephone passband and differ from space by >= 200 Hz.
+    /// </summary>
+    public double FreqMark { get; private init; } = 2200.0;
+
+    /// <summary>
+    /// FSK space frequency in Hz (bit=0). Must be within telephone passband and differ from mark by >= 200 Hz.
+    /// </summary>
+    public double FreqSpace { get; private init; } = 1800.0;
+
+    /// <summary>
+    /// Fraction of each bit period to skip at the start and end (symmetric guard interval).
+    /// Reduces inter-symbol interference from room reverb/echo.
+    /// Higher values improve ISI rejection but reduce Goertzel resolution.
+    /// Must ensure the analysis window has enough samples: SamplesPerBit * (1 - 2*Guard) >= 16.
+    /// </summary>
+    public double GuardFraction { get; private init; }
+
+    // --- Derived (computed from BaudRate) ---
+
+    public int SamplesPerBit => Constants.SampleRate / BaudRate;
+
+    // --- Presets ---
+
+    private static TransmissionProfile Slow =>
+        new()
+        {
+            BaudRate = 150,
+            PreambleBits = 256,
+            Amplitude = 0.15,
+            SignalThreshold = 0.00005,
+            DecisionRatio = 1.3,
+            FecRepeat = 5,
+            FreqMark = 2400.0,
+            FreqSpace = 1600.0, // 800 Hz separation for maximum resilience
+        };
+
+    private static TransmissionProfile Normal =>
+        new()
+        {
+            BaudRate = 300,
+            PreambleBits = 128,
+            Amplitude = 0.12,
+            SignalThreshold = 0.0001,
+            DecisionRatio = 1.5,
+            FecRepeat = 3,
+            FreqMark = 2200.0,
+            FreqSpace = 1800.0, // 400 Hz separation (standard)
+        };
+
+    private static TransmissionProfile Fast =>
+        new()
+        {
+            BaudRate = 350,
+            PreambleBits = 64,
+            Amplitude = 0.12,
+            SignalThreshold = 0.0002,
+            DecisionRatio = 1.5,
+            FecRepeat = 1,
+            FreqMark = 2200.0,
+            FreqSpace = 1800.0, // 400 Hz separation
+        };
+
+    /// <summary>
+    /// Robust preset: designed for over-the-air (speaker → microphone) transmission
+    /// through voice codecs (WhatsApp, Telegram, etc.).
+    ///
+    /// Key design choices:
+    /// - 50 baud: 20ms per bit gives strong Goertzel SNR and reduces ISI from reverb.
+    ///   Goertzel bin width = 50 Hz (vs 400 Hz separation → 8 bins apart, zero crosstalk).
+    /// - 2000/2500 Hz: both frequencies in the voice codec sweet spot (1500-3000 Hz)
+    ///   where pre-emphasis, speaker response, and mic sensitivity are similar.
+    ///   500 Hz separation lands on exact Goertzel bins at all guard intervals.
+    ///   At 50 baud with guard=0.40, analysis window=192 samples, bin width=250 Hz,
+    ///   so 500 Hz = 2 bins apart → clean separation with no spectral leakage.
+    /// - 512-bit preamble: longer preamble for reliable sync at lower baud rate.
+    /// - 7x FEC: stronger error correction to handle residual ISI/reverb errors.
+    /// - 0.40 guard interval: skips 40% of each bit boundary to reduce ISI.
+    /// </summary>
+    private static TransmissionProfile Robust =>
+        new()
+        {
+            BaudRate = 50,
+            PreambleBits = 512,
+            Amplitude = 0.5,
+            SignalThreshold = 0.00005,
+            DecisionRatio = 1.2,
+            FecRepeat = 7,
+            FreqMark = 2500.0,
+            FreqSpace = 2000.0, // 500 Hz separation, exact Goertzel bins at all guard values
+            StealthNoise = 0.0, // no added noise -- clarity over stealth
+            GuardFraction = 0.40, // aggressive guard for reverb rejection at 50 baud (192 analysis samples)
+        };
+
+    private static TransmissionProfile FromPreset(string name)
+    {
+        return name.ToLowerInvariant() switch
+        {
+            "slow" => Slow,
+            "normal" => Normal,
+            "fast" => Fast,
+            "robust" => Robust,
+            _ => throw new ArgumentException($"Unknown preset '{name}'. Valid: slow, normal, fast, robust.")
+        };
+    }
+
+    /// <summary>
+    /// Build a profile from CLI options: start with a preset, then override individual values.
+    /// </summary>
+    public static TransmissionProfile FromOptions(string preset, int? baudRate, int? preambleBits,
+        double? amplitude, double? signalThreshold, double? decisionRatio, int? fecRepeat,
+        double? freqMark = null, double? freqSpace = null, double? guardFraction = null)
+    {
+        var profile = FromPreset(preset);
+
+        // Override individual fields if explicitly supplied
+        if (baudRate.HasValue || preambleBits.HasValue || amplitude.HasValue ||
+            signalThreshold.HasValue || decisionRatio.HasValue || fecRepeat.HasValue ||
+            freqMark.HasValue || freqSpace.HasValue || guardFraction.HasValue)
+        {
+            profile = new TransmissionProfile
+            {
+                BaudRate = baudRate ?? profile.BaudRate,
+                PreambleBits = preambleBits ?? profile.PreambleBits,
+                Amplitude = amplitude ?? profile.Amplitude,
+                SignalThreshold = signalThreshold ?? profile.SignalThreshold,
+                DecisionRatio = decisionRatio ?? profile.DecisionRatio,
+                FecRepeat = fecRepeat ?? profile.FecRepeat,
+                FreqMark = freqMark ?? profile.FreqMark,
+                FreqSpace = freqSpace ?? profile.FreqSpace,
+                GuardFraction = guardFraction ?? profile.GuardFraction,
+            };
+        }
+
+        profile.Validate();
+        return profile;
+    }
+
+    private void Validate()
+    {
+        if (BaudRate is < 50 or > 2400)
+        {
+            throw new ArgumentException($"BaudRate must be 50-2400, got {BaudRate}.");
+        }
+
+        // Goertzel frequency resolution = SampleRate / SamplesPerBit
+        // Must be narrower than the frequency separation (400 Hz) to distinguish mark from space
+        var freqSep = Math.Abs(FreqMark - FreqSpace);
+        var binWidth = (double)Constants.SampleRate / SamplesPerBit;
+        if (binWidth > freqSep - 50)
+        {
+            Log.Warning("Baud rate {Baud} gives Goertzel bin width {Bin:F0} Hz, " +
+                        "which is close to the {Sep:F0} Hz mark/space separation. Noise resilience will be poor.",
+                BaudRate, binWidth, freqSep);
+        }
+
+        if (Amplitude is <= 0 or > 1.0)
+        {
+            throw new ArgumentException($"Amplitude must be in (0, 1.0], got {Amplitude}.");
+        }
+
+        if (PreambleBits < 16)
+        {
+            throw new ArgumentException($"PreambleBits must be >= 16, got {PreambleBits}.");
+        }
+
+        if (SignalThreshold <= 0)
+        {
+            throw new ArgumentException($"SignalThreshold must be > 0, got {SignalThreshold}.");
+        }
+
+        if (DecisionRatio < 1.0)
+        {
+            throw new ArgumentException($"DecisionRatio must be >= 1.0, got {DecisionRatio}.");
+        }
+
+        if (FecRepeat < 1 || FecRepeat > 9 || FecRepeat % 2 == 0)
+        {
+            throw new ArgumentException($"FecRepeat must be an odd number 1-9, got {FecRepeat}.");
+        }
+
+        if (FreqMark is < 300 or > 3400)
+        {
+            throw new ArgumentException($"FreqMark must be 300-3400 Hz (telephone passband), got {FreqMark}.");
+        }
+
+        if (FreqSpace is < 300 or > 3400)
+        {
+            throw new ArgumentException($"FreqSpace must be 300-3400 Hz (telephone passband), got {FreqSpace}.");
+        }
+
+        if (Math.Abs(FreqMark - FreqSpace) < 200)
+        {
+            throw new ArgumentException($"FreqMark and FreqSpace must differ by >= 200 Hz, got {Math.Abs(FreqMark - FreqSpace):F0} Hz.");
+        }
+    }
+
+    public void LogSettings()
+    {
+        Log.Information("Profile: {Baud} baud, preamble={Preamble}, amplitude={Amp}, " +
+            "threshold={Thresh}, ratio={Ratio}, FEC={Fec}x, mark={Mark} Hz, space={Space} Hz",
+            BaudRate, PreambleBits, Amplitude, SignalThreshold, DecisionRatio, FecRepeat,
+            FreqMark, FreqSpace);
+
+        var binWidth = (double)Constants.SampleRate / SamplesPerBit;
+        var effectiveBaud = (double)BaudRate / FecRepeat;
+        Log.Information("Effective data rate: ~{Rate:F0} data bits/sec (~{Bytes:F1} bytes/sec after base64+framing)",
+            effectiveBaud, effectiveBaud / 8 / 1.37);
+        var freqSep = Math.Abs(FreqMark - FreqSpace);
+        Log.Debug("Goertzel bin width: {Bin:F0} Hz (freq separation: {Sep:F0} Hz)", binWidth, freqSep);
+    }
+}

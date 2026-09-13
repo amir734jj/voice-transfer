@@ -1,4 +1,3 @@
-using System.Text;
 using VoiceTransfer.Data;
 using VoiceTransfer.Logic;
 using VoiceTransfer.Modes;
@@ -6,81 +5,12 @@ using Xunit;
 
 namespace VoiceTransfer.Tests;
 
-public sealed class AcousticChannelTests
+public abstract class AcousticChannelTestBase
 {
     private static readonly TransmissionProfile Profile = TransmissionProfile.FromOptions(
         "robust", null, null, null, null, null, null);
 
-    [Fact]
-    public void RobustProfile_DecodesThroughNoisyEchoingRoom_AndDumpsWav()
-    {
-        var payload = "acoustic round trip"u8.ToArray();
-        var microphoneSamples = CreateMicrophoneRecording(
-            payload, clockErrorPpm: 0, AmbientNoise.WhiteNoise);
-        var outputPath = GetArtifactPath("acoustic-noise-echo.wav");
-
-        var decoded = DecodeThroughWav(outputPath, microphoneSamples);
-
-        Assert.Equal(payload, decoded);
-    }
-
-    [Theory]
-    [InlineData(AmbientNoise.Room)]
-    [InlineData(AmbientNoise.FanAndHvac)]
-    [InlineData(AmbientNoise.SpeechBabble)]
-    public void RobustProfile_DecodesThroughNaturalAmbientNoise(AmbientNoise ambientNoise)
-    {
-        var payload = "natural noise round trip"u8.ToArray();
-        var microphoneSamples = CreateMicrophoneRecording(
-            payload, clockErrorPpm: 0, ambientNoise);
-        var outputPath = GetArtifactPath($"acoustic-{ambientNoise}.wav");
-
-        var decoded = DecodeThroughWav(outputPath, microphoneSamples);
-
-        Assert.Equal(payload, decoded);
-    }
-
-    [Fact]
-    public void RobustProfile_DecodesThroughAllAmbientNoiseCombined()
-    {
-        var payload = "combined ambient noise round trip"u8.ToArray();
-        var microphoneSamples = CreateMicrophoneRecording(
-            payload, clockErrorPpm: 0, AmbientNoise.All);
-        var outputPath = GetArtifactPath("acoustic-AllNoise.wav");
-
-        var decoded = DecodeThroughWav(outputPath, microphoneSamples);
-
-        Assert.Equal(payload, decoded);
-    }
-
-    [Fact]
-    public void RobustProfile_DecodesThroughFrequencyCapsAndDeviceLimiters()
-    {
-        var payload = "limited speaker and microphone"u8.ToArray();
-        var microphoneSamples = CreateHardwareLimitedRecording(payload);
-        var outputPath = GetArtifactPath("acoustic-frequency-caps-limiters.wav");
-
-        var decoded = DecodeThroughWav(outputPath, microphoneSamples);
-
-        Assert.Equal(payload, decoded);
-    }
-
-    [Theory]
-    [InlineData(150)]
-    [InlineData(-150)]
-    public void RobustProfile_DecodesWithIndependentAudioClocks(int clockErrorPpm)
-    {
-        var payload = "Clock drift accumulates across this message."u8.ToArray();
-        var microphoneSamples = CreateMicrophoneRecording(
-            payload, clockErrorPpm, AmbientNoise.Room);
-        var outputPath = GetArtifactPath($"acoustic-clock-{clockErrorPpm:+0;-0}.wav");
-
-        var decoded = DecodeThroughWav(outputPath, microphoneSamples);
-
-        Assert.Equal(payload, decoded);
-    }
-
-    private static byte[]? DecodeThroughWav(string path, float[] microphoneSamples)
+    protected static byte[]? DecodeThroughWav(string path, float[] microphoneSamples)
     {
         WavFile.Write(path, microphoneSamples, Constants.SampleRate, Constants.Channels);
         var fromFile = WavFile.Read(path, out var sampleRate, out var channels);
@@ -93,7 +23,7 @@ public sealed class AcousticChannelTests
             processed, Profile, strictDetection: true);
     }
 
-    private static float[] CreateMicrophoneRecording(
+    protected static float[] CreateMicrophoneRecording(
         byte[] payload, int clockErrorPpm, AmbientNoise ambientNoise)
     {
         var bits = FrameCodec.Encode(payload, Profile);
@@ -105,7 +35,7 @@ public sealed class AcousticChannelTests
         return AddAmbientNoise(drifted, ambientNoise, seed: 734);
     }
 
-    private static float[] CreateHardwareLimitedRecording(byte[] payload)
+    protected static float[] CreateHardwareLimitedRecording(byte[] payload)
     {
         var bits = FrameCodec.Encode(payload, Profile);
         var transmitted = new FskModulator(Profile).ModulateBits(bits);
@@ -272,31 +202,54 @@ public sealed class AcousticChannelTests
         var random = new Random(seed);
         var noise = new double[samples.Length];
         double fanState = 0;
+        double trafficState = 0;
 
         for (var i = 0; i < noise.Length; i++)
         {
             var time = (double)i / Constants.SampleRate;
             var white = NextGaussian(random);
             fanState = fanState * 0.995 + white * 0.005;
+            trafficState = trafficState * 0.9995 + white * 0.0005;
 
-            noise[i] = ambientNoise switch
+            var sample = 0.0;
+            if (ambientNoise.HasFlag(AmbientNoise.WhiteNoise))
             {
-                AmbientNoise.WhiteNoise => white,
-                AmbientNoise.Room => white * 0.25
+                sample += white;
+            }
+
+            if (ambientNoise.HasFlag(AmbientNoise.Room))
+            {
+                sample += white * 0.25
                     + Math.Sin(2.0 * Math.PI * 60.0 * time)
-                    + 0.35 * Math.Sin(2.0 * Math.PI * 120.0 * time),
-                AmbientNoise.FanAndHvac => fanState * 12.0
+                    + 0.35 * Math.Sin(2.0 * Math.PI * 120.0 * time);
+            }
+
+            if (ambientNoise.HasFlag(AmbientNoise.FanAndHvac))
+            {
+                sample += fanState * 12.0
                     + 0.8 * Math.Sin(2.0 * Math.PI * 60.0 * time)
-                    + 0.25 * Math.Sin(2.0 * Math.PI * 180.0 * time),
-                AmbientNoise.SpeechBabble => CreateSpeechBabble(time, white),
-                AmbientNoise.All => white * 0.25
-                    + fanState * 12.0
-                    + 1.8 * Math.Sin(2.0 * Math.PI * 60.0 * time)
-                    + 0.35 * Math.Sin(2.0 * Math.PI * 120.0 * time)
-                    + 0.25 * Math.Sin(2.0 * Math.PI * 180.0 * time)
-                    + CreateSpeechBabble(time, white),
-                _ => throw new ArgumentOutOfRangeException(nameof(ambientNoise)),
-            };
+                    + 0.25 * Math.Sin(2.0 * Math.PI * 180.0 * time);
+            }
+
+            if (ambientNoise.HasFlag(AmbientNoise.SpeechBabble))
+            {
+                sample += CreateSpeechBabble(time, white);
+            }
+
+            if (ambientNoise.HasFlag(AmbientNoise.HumanTalk))
+            {
+                sample += CreateHumanTalk(time, white);
+            }
+
+            if (ambientNoise.HasFlag(AmbientNoise.Traffic))
+            {
+                sample += trafficState * 35.0
+                    + white * 0.12
+                    + 0.6 * Math.Sin(2.0 * Math.PI * 45.0 * time)
+                    + 0.2 * Math.Sin(2.0 * Math.PI * 90.0 * time);
+            }
+
+            noise[i] = sample;
         }
 
         var measuredNoisePower = noise.Select(value => value * value).Average();
@@ -332,7 +285,22 @@ public sealed class AcousticChannelTests
         return syllableEnvelope * voices + breathNoise * 0.15;
     }
 
-    private static string GetArtifactPath(string fileName)
+    private static double CreateHumanTalk(double time, double breathNoise)
+    {
+        var syllableEnvelope = Math.Max(0.0,
+            0.35
+            + 0.35 * Math.Sin(2.0 * Math.PI * 4.2 * time)
+            + 0.20 * Math.Sin(2.0 * Math.PI * 2.1 * time + 0.8));
+        var pitch = 125.0 + 18.0 * Math.Sin(2.0 * Math.PI * 0.7 * time);
+        var voiced = Math.Sin(2.0 * Math.PI * pitch * time)
+            + 0.55 * Math.Sin(2.0 * Math.PI * pitch * 2.0 * time)
+            + 0.3 * Math.Sin(2.0 * Math.PI * 750.0 * time)
+            + 0.2 * Math.Sin(2.0 * Math.PI * 1200.0 * time);
+
+        return syllableEnvelope * voiced + breathNoise * 0.08;
+    }
+
+    protected static string GetArtifactPath(string fileName)
     {
         var root = new DirectoryInfo(AppContext.BaseDirectory);
         while (root != null && !File.Exists(Path.Combine(root.FullName, "VoiceTransfer.slnx")))
@@ -345,12 +313,15 @@ public sealed class AcousticChannelTests
         return Path.Combine(directory, fileName);
     }
 
+    [Flags]
     public enum AmbientNoise
     {
-        WhiteNoise,
-        Room,
-        FanAndHvac,
-        SpeechBabble,
-        All,
+        WhiteNoise = 1,
+        Room = 2,
+        FanAndHvac = 4,
+        SpeechBabble = 8,
+        HumanTalk = 16,
+        Traffic = 32,
+        All = WhiteNoise | Room | FanAndHvac | SpeechBabble | HumanTalk | Traffic,
     }
 }
