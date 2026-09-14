@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="VoiceTransfer/VoiceTransfer.csproj" />
   <Project Path="VoiceTransfer.Tests/VoiceTransfer.Tests.csproj" />
+  <Folder Name="/TestResults/" />
 </Solution>

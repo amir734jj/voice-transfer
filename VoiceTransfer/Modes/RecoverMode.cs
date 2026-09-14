@@ -26,10 +26,20 @@ public static class RecoverMode
         Log.Information("=== Phase 1: Frequency scan ===");
         ScanFrequencies(samples);
 
-        // Phase 2: Mark-only threshold detection
+        // Phase 2: Multi-preset decode attempts
+        Log.Information("=== Phase 2: Multi-preset decode attempts ===");
+        var result = TryMultiPreset(samples, password);
+        if (result != null)
+        {
+            File.WriteAllBytes(outputFile, result);
+            Log.Information("Successfully recovered {Bytes} bytes -> {File}", result.Length, outputFile);
+            return;
+        }
+
+        // Phase 3: Mark-only threshold detection
         // When the space tone is destroyed by codec, detect bits using only mark power
-        Log.Information("=== Phase 2: Mark-only threshold detection ===");
-        var result = TryMarkOnlyThreshold(samples, password);
+        Log.Information("=== Phase 3: Mark-only threshold detection ===");
+        result = TryMarkOnlyThreshold(samples, password);
         if (result != null)
         {
             File.WriteAllBytes(outputFile, result);
@@ -37,19 +47,9 @@ public static class RecoverMode
             return;
         }
 
-        // Phase 3: Echo-cancelling demodulation
-        Log.Information("=== Phase 3: Echo-cancelling recovery ===");
+        // Phase 4: Echo-cancelling demodulation
+        Log.Information("=== Phase 4: Echo-cancelling recovery ===");
         result = TryEchoCancelling(samples, password);
-        if (result != null)
-        {
-            File.WriteAllBytes(outputFile, result);
-            Log.Information("Successfully recovered {Bytes} bytes -> {File}", result.Length, outputFile);
-            return;
-        }
-
-        // Phase 4: Multi-preset decode attempts
-        Log.Information("=== Phase 4: Multi-preset decode attempts ===");
-        result = TryMultiPreset(samples, password);
         if (result != null)
         {
             File.WriteAllBytes(outputFile, result);
@@ -375,9 +375,9 @@ public static class RecoverMode
     /// </summary>
     private static byte[]? TryMultiPreset(float[] samples, string? password)
     {
-        var presets = new[] { "normal", "slow", "fast" };
-        var guards = new[] { 0.0, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40 };
-        var ratios = new[] { 1.0, 1.1, 1.2, 1.5 };
+        var presets = new[] { "robust", "normal", "slow", "fast" };
+        var guards = new[] { 0.40, 0.0, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35 };
+        var ratios = new[] { 1.2, 1.0, 1.1, 1.5 };
 
         foreach (var preset in presets)
         {
